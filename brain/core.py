@@ -10,7 +10,7 @@ neuro_client = Client(
 )
 
 class NeuroBrain:
-    def __init__(self, model="qwen3.5:4b"):
+    def __init__(self, model="qwen3.5:4b"): # you can add your own local downloaded llm
         self.url = "http://localhost:11434/api/chat"
         self.model = model
         self.history = [{
@@ -97,9 +97,25 @@ class NeuroBrain:
         }
         
         try:
-            response = requests.post(self.url, json=payload)
-            reply = response.json()['message']['content']
+            response = requests.post(self.url, json=payload, timeout=30)
+            response.raise_for_status() # Check if the request actually succeeded
+            
+            data = response.json()
+            
+            # Check for the modern Ollama / Qwen response structure
+            if 'message' in data and 'content' in data['message']:
+                reply = data['message']['content']
+            elif 'response' in data: # Fallback for some Ollama configurations
+                reply = data['response']
+            else:
+                reply = "(Neuro is speechless... check if the model pulled correctly.)"
+
             self.history.append({"role": "assistant", "content": reply})
             return reply
+
+        except requests.exceptions.RequestException as e:
+            return f"Neuro's brain is disconnected (Connection Error): {e}"
+        except KeyError as e:
+            return f"Neuro had a stroke (Missing key: {e}). Full response: {response.text}"
         except Exception as e:
-            return f"Error: {e}"
+            return f"Neuro is confused: {e}"
