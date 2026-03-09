@@ -1,0 +1,25 @@
+# Python junk
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Miniconda / Conda
+.conda/
+conda-bld/
+
+# Audio Files (Neuro's voice outputs)
+*.wav
+*.mp3
+
+# Hardware/OS junk
+.DS_Store
+.vscode/
+.idea/
+
+# Large Model Files (Ollama handles these, don't put them in Git)
+*.gguf
+*.bin
+models/
