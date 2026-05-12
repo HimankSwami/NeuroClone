@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neuro — VTuber Interface</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:        #06060e;
+            --bg-card:   #0c0c16;
+            --border:    #161625;
+            --accent:    #7c5cfc;
+            --accent2:   #5ce1e6;
+            --text:      #e4e2f4;
+            --text-dim:  #5d5b78;
+            --input-bg:  #12121f;
+            --glow:      0 0 30px rgba(124,92,252,0.12);
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+        }
+
+        .avatar-panel {
+            width: 420px;
+            min-width: 420px;
+            background: var(--bg-card);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #vrm-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 2;
+            background: var(--bg-card);
+            transition: opacity 0.6s ease;
+        }
+        .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loading-overlay p {
+            margin-top: 16px;
+            font-size: 13px;
+            color: var(--text-dim);
+            letter-spacing: 0.5px;
+        }
+
+        .status-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 0; right: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            z-index: 3;
+        }
+        .status-label {
+            padding: 5px 18px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.8px;
+            background: rgba(12,12,22,0.7);
+            backdrop-filter: blur(10px);
+            color: var(--text-dim);
+            transition: all 0.5s ease;
+        }
+        .status-label.speaking { background: rgba(92,225,230,0.1); color: var(--accent2); }
+        .status-label.thinking { background: rgba(124,92,252,0.1); color: var(--accent); animation: status-pulse 1.5s ease-in-out infinite; }
+        @keyframes status-pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+        .chat-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .chat-header {
+            padding: 20px 28px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .chat-header h1 {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .chat-header h1 span { color: var(--accent); }
+        .chat-header p {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+        #connection-dot {
+            display: inline-block;
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: #ef4444;
+            margin-right: 6px;
+            vertical-align: middle;
+            transition: background 0.3s;
+        }
+        #connection-dot.connected { background: #22c55e; }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            scroll-behavior: smooth;
+        }
+        .messages::-webkit-scrollbar { width: 4px; }
+        .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .msg {
+            max-width: 70%;
+            padding: 12px 18px;
+            border-radius: 16px;
+            font-size: 14px;
+            line-height: 1.65;
+            animation: fade-up 0.3s ease;
+        }
+        @keyframes fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .msg.user { align-self: flex-end; background: #18142f; border-bottom-right-radius: 4px; }
+        .msg.neuro { align-self: flex-start; background: #101018; border: 1px solid var(--border); color: #cccce0; border-bottom-left-radius: 4px; }
+        .msg.neuro .label { font-size: 10px; color: var(--accent); font-weight: 700; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.8px; }
+        .msg.neuro .text-content { white-space: pre-wrap; }
+
+        .typing-indicator {
+            align-self: flex-start;
+            padding: 14px 20px;
+            display: flex;
+            gap: 6px;
+            animation: fade-up 0.3s ease;
+            background: #101018;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            border-bottom-left-radius: 4px;
+        }
+        .typing-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: typing-bounce 1.2s ease-in-out infinite;
+        }
+        .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+        @keyframes typing-bounce { 0%,60%,100% { transform: translateY(0); opacity: 0.3; } 30% { transform: translateY(-6px); opacity: 1; } }
+
+        .input-bar {
+            padding: 16px 28px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+        }
+        #chat-input {
+            flex: 1;
+            padding: 13px 20px;
+            border-radius: 24px;
+            border: 1px solid var(--border);
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        #chat-input:focus { border-color: var(--accent); box-shadow: var(--glow); }
+        #chat-input::placeholder { color: var(--text-dim); }
+        #chat-input:disabled { opacity: 0.5; }
+
+        #send-btn {
+            width: 46px; height: 46px;
+            border-radius: 50%;
+            border: none;
+            background: var(--accent);
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s, transform 0.1s;
+        }
+        #send-btn:hover { background: #6a4ae8; }
+        #send-btn:active { transform: scale(0.92); }
+        #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        #send-btn svg { width: 20px; height: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="avatar-panel">
+        <canvas id="vrm-canvas"></canvas>
+        <div class="loading-overlay" id="loading">
+            <div class="spinner"></div>
+            <p>Loading Neuro...</p>
+        </div>
+        <div class="status-bar">
+            <div class="status-label" id="status">Idle</div>
+        </div>
+    </div>
+
+    <div class="chat-panel">
+        <div class="chat-header">
+            <h1><span id="connection-dot"></span><span>Neuro</span></h1>
+            <p>type <b style="color:var(--accent)">voice</b> or <b style="color:var(--accent)">text</b> to toggle speech output</p>
+        </div>
+        <div class="messages" id="messages"></div>
+        <div class="input-bar">
+            <input id="chat-input" type="text" placeholder="Say something..." autocomplete="off" />
+            <button id="send-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"/>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+            "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.3.3/lib/three-vrm.module.js"
+        }
+    }
+    </script>
+
+    <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+
+    // ---- DOM refs ----
+    const canvas     = document.getElementById('vrm-canvas');
+    const loadingEl  = document.getElementById('loading');
+    const statusEl   = document.getElementById('status');
+    const messagesEl = document.getElementById('messages');
+    const chatInput  = document.getElementById('chat-input');
+    const sendBtn    = document.getElementById('send-btn');
+    const dot        = document.getElementById('connection-dot');
+
+    // ---- Renderer ----
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    // Scene with gradient background
+    const scene = new THREE.Scene();
+    const bgCanvas = document.createElement('canvas');
+    bgCanvas.width = 2; bgCanvas.height = 512;
+    const bgCtx = bgCanvas.getContext('2d');
+    const grad = bgCtx.createLinearGradient(0, 0, 0, 512);
+    grad.addColorStop(0, '#0f0f1e');
+    grad.addColorStop(1, '#060610');
+    bgCtx.fillStyle = grad;
+    bgCtx.fillRect(0, 0, 2, 512);
+    scene.background = new THREE.CanvasTexture(bgCanvas);
+
+    // Camera
+    const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
+    camera.position.set(0, 1.3, 3.5);
+
+    // Lighting
+    scene.add(new THREE.AmbientLight(0x404060, 0.4));
+    const key = new THREE.PointLight(0xfff4e6, 2.5, 20);
+    key.position.set(2, 2.5, 3);
+    scene.add(key);
+    const rim = new THREE.PointLight(0x7c5cfc, 1.2, 20);
+    rim.position.set(0, 3, -2);
+    scene.add(rim);
+    const fill = new THREE.PointLight(0xc4d0ff, 0.8, 20);
+    fill.position.set(-2.5, 1.5, 2);
+    scene.add(fill);
+
+    // ---- VRM ----
+    let vrm = null;
+    const clock = new THREE.Clock();
+
+    const loader = new GLTFLoader();
+    loader.register((parser) => new VRMLoaderPlugin(parser));
+
+    loader.load(
+        '/static/Seed-san.vrm',
+        (gltf) => {
+            vrm = gltf.userData.vrm;
+            VRMUtils.removeUnnecessaryVertices(vrm.scene);
+            VRMUtils.removeUnnecessaryJoints(vrm.scene);
+
+            scene.add(vrm.scene);
+
+            const box = new THREE.Box3().setFromObject(vrm.scene);
+            const size = box.max.y - box.min.y;
+            const scale = 2.2 / size;
+            vrm.scene.scale.setScalar(scale);
+            const centerY = (box.max.y + box.min.y) / 2 * scale;
+            vrm.scene.position.y = -centerY;
+
+            loadingEl.classList.add('hidden');
+            console.log('[Neuro] VRM loaded');
+        },
+        (progress) => {
+            if (progress.total) {
+                const pct = Math.round(progress.loaded / progress.total * 100);
+                loadingEl.querySelector('p').textContent = `Loading Neuro... ${pct}%`;
+            }
+        },
+        (error) => {
+            console.error('[Neuro] VRM load error:', error);
+            loadingEl.querySelector('p').textContent = 'VRM failed to load';
+        }
+    );
+
+    // ---- Resize ----
+    function resize() {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        const w = rect.width;
+        const h = rect.height;
+        renderer.setSize(w, h);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // ---- Animate ----
+    let blinkTimer = 0;
+    function animate() {
+        requestAnimationFrame(animate);
+        const dt = clock.getDelta();
+
+        if (vrm) {
+            vrm.update(dt);
+            const t = clock.elapsedTime;
+            const hips = vrm.humanoid.getNormalizedBoneNode('hips');
+            if (hips) hips.rotation.y = Math.sin(t * 0.5) * 0.03;
+
+            blinkTimer += dt;
+            if (blinkTimer > 4) {
+                blinkTimer = 0;
+                try {
+                    vrm.expressionManager.setValue('blink', 1);
+                    setTimeout(() => { vrm.expressionManager.setValue('blink', 0); }, 150);
+                } catch(e) {}
+            }
+        }
+
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    // ---- Expression helpers ----
+    function clampExpression(val) { return Math.max(0, Math.min(1, val)); }
+
+    function setExpression(mode) {
+        if (!vrm || !vrm.expressionManager) return;
+        // Reset all
+        const presets = ['happy', 'sad', 'angry', 'relaxed', 'surprised', 'blink'];
+        presets.forEach(p => { try { vrm.expressionManager.setValue(p, 0); } catch(e) {} });
+
+        if (mode === 'happy') { try { vrm.expressionManager.setValue('happy', 1); } catch(e) {} }
+        else if (mode === 'surprised') { try { vrm.expressionManager.setValue('surprised', 1); } catch(e) {} }
+        else if (mode === 'thinking') { try { vrm.expressionManager.setValue('relaxed', 0.6); } catch(e) {} }
+        else { try { vrm.expressionManager.setValue('relaxed', 0.3); } catch(e) {} }
+    }
+
+    // ---- Lip sync ----
+    let lipTimer = null;
+    function startLipSync(text) {
+        stopLipSync();
+        const words = text.split(/\s+/);
+        let idx = 0;
+
+        lipTimer = setInterval(() => {
+            if (idx >= words.length) { stopLipSync(); return; }
+            const open = 0.2 + Math.random() * 0.8;
+            try { vrm.expressionManager.setValue('aa', open); } catch(e) {}
+            idx++;
+        }, 90);
+    }
+
+    function stopLipSync() {
+        if (lipTimer) { clearInterval(lipTimer); lipTimer = null; }
+        try { if (vrm) vrm.expressionManager.setValue('aa', 0); } catch(e) {}
+    }
+
+    // ---- Status ----
+    function setStatus(s) {
+        statusEl.classList.remove('speaking', 'thinking');
+        if (s === 'speaking') {
+            statusEl.textContent = 'Speaking';
+            statusEl.classList.add('speaking');
+        } else if (s === 'thinking') {
+            statusEl.textContent = 'Thinking';
+            statusEl.classList.add('thinking');
+        } else {
+            statusEl.textContent = 'Idle';
+        }
+    }
+
+    // ---- Messages ----
+    function addUserMsg(text) {
+        const div = document.createElement('div');
+        div.className = 'msg user';
+        div.textContent = text;
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    let lastNeuroMsg = null;
+    function addNeuroMsg(text) {
+        if (lastNeuroMsg && lastNeuroMsg.querySelector('.text-content')) {
+            lastNeuroMsg.querySelector('.text-content').textContent = text;
+        } else {
+            lastNeuroMsg = document.createElement('div');
+            lastNeuroMsg.className = 'msg neuro';
+            const label = document.createElement('div');
+            label.className = 'label';
+            label.textContent = 'Neuro';
+            lastNeuroMsg.appendChild(label);
+            const tDiv = document.createElement('div');
+            tDiv.className = 'text-content';
+            tDiv.textContent = text;
+            lastNeuroMsg.appendChild(tDiv);
+            messagesEl.appendChild(lastNeuroMsg);
+        }
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function showTyping() {
+        if (document.getElementById('typing')) return;
+        const el = document.createElement('div');
+        el.id = 'typing';
+        el.className = 'typing-indicator';
+        el.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+        messagesEl.appendChild(el);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+    function hideTyping() { document.getElementById('typing')?.remove(); }
+
+    let isProcessing = false;
+
+    // ---- WebSocket ----
+    let ws;
+    function connect() {
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${proto}//${location.host}/ws/chat`);
+
+        ws.onopen = () => dot.classList.add('connected');
+        ws.onclose = () => { dot.classList.remove('connected'); setTimeout(connect, 2000); };
+
+        ws.onmessage = (e) => {
+            try {
+                const d = JSON.parse(e.data);
+                if (d.type === 'state') {
+                    if (d.state === 'thinking') { setStatus('thinking'); showTyping(); }
+                    else if (d.state === 'idle') {
+                        setStatus('idle');
+                        hideTyping();
+                        stopLipSync();
+                        isProcessing = false;
+                        sendBtn.disabled = false;
+                        chatInput.disabled = false;
+                    }
+                }
+                if (d.type === 'text') {
+                    hideTyping();
+                    setStatus('speaking');
+                    addNeuroMsg(d.text);
+                    startLipSync(d.text);
+                }
+                if (d.type === 'announcement') {
+                    addNeuroMsg(d.text);
+                    isProcessing = false;
+                    sendBtn.disabled = false;
+                    chatInput.disabled = false;
+                }
+            } catch(err) { console.error('WebSocket parse error:', err); }
+        };
+    }
+    connect();
+
+    // ---- Send ----
+    function sendMessage() {
+        const text = chatInput.value.trim();
+        if (!text || isProcessing) return;
+        isProcessing = true;
+        sendBtn.disabled = true;
+        chatInput.disabled = true;
+        lastNeuroMsg = null;
+        addUserMsg(text);
+        chatInput.value = '';
+        ws.send(JSON.stringify({ message: text }));
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+    </script>
+</body>
+</html>

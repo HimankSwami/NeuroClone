@@ -1,86 +1,108 @@
 import os
+import re
+import subprocess
 import torch
 import fairseq
 
-# This permanently bypasses the PyTorch 2.6 security check for this script
+# Bypass PyTorch 2.6 security check for RVC model files
 os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
 torch.serialization.add_safe_globals([fairseq.data.dictionary.Dictionary])
 
-import subprocess
-import os
-import torch
-import re
-import fairseq
+# -------------------------------------------------------------------------
+# Paths — edit BASE_PATH if your project lives elsewhere
+# -------------------------------------------------------------------------
+BASE_PATH      = os.path.expanduser("~/Project/NeuroClone")
+MODEL_PATH     = os.path.join(BASE_PATH, "models", "ayaka.pth")
+INDEX_PATH     = os.path.join(BASE_PATH, "models", "ayaka.index")
+PIPER_MODEL    = os.path.join(BASE_PATH, "models", "en_US-hfc_female-medium.onnx")
+TEMP_AUDIO     = os.path.join(BASE_PATH, "voice", "temp.wav")
+FINAL_AUDIO    = os.path.join(BASE_PATH, "voice", "output.wav")
 
-# Ensure PyTorch trusts the RVC model files
-torch.serialization.add_safe_globals([fairseq.data.dictionary.Dictionary])
 
-def preprocess_text(text):
+# -------------------------------------------------------------------------
+# Text Preprocessing — makes TTS sound more natural
+# -------------------------------------------------------------------------
+def preprocess_text(text: str) -> str:
+    text = text.replace("*", "")                          # Remove markdown bold/italic
+    text = re.sub(r'[\U00010000-\U0010ffff]', '', text)  # Remove emoji / surrogate chars
+    text = re.sub(r'!+', '!', text)                       # Collapse multiple !!!
+    text = re.sub(r'\(.*?\)', '[[ . ]] [[ . ]] [[ . ]]', text)  # (actions) → pause
+    text = text.replace("...", "[[ . ]] [[ . ]]")         # ... → hesitation pause
+    text = text.replace("!", "! [[ . ]]")                 # ! → slight breath after
+    text = re.sub(r'\s+', ' ', text).strip()              # Normalise whitespace
+    return text
 
-    text = text.replace("*", "")  # Remove asterisks used for emphasis
-    text = re.sub(r'[\U00010000-\U0010ffff]', '', text)
-    text = re.sub(r'!+', '!', text)
-    # 1. Turn actions in brackets into a 1.5 second silence
-    # Using [[ . ]] tells Piper to insert a phoneme-level pause
-    text = re.sub(r'\(.*?\)', r'[[ . ]] [[ . ]] [[ . ]]', text)
 
-    # 2. Turn '...' into a 1 second hesitant pause
-    text = text.replace("...", "[[ . ]] [[ . ]]")
-
-    # 3. Add a slight breath after exclamation marks
-    text = text.replace("!", "! [[ . ]]")
-
-    return " ".join(text.split())
-
-def speak(text):
-    # --- Clear GPU Memory and Preprocess ---
-    torch.cuda.empty_cache()
-    processed_text = preprocess_text(text)
-    
-    # Escape double quotes for the shell command
-    # We do this outside the f-string to avoid Python SyntaxErrors
-    shell_safe_text = processed_text.replace('"', '\\"')
-    
-    base_path = os.path.expanduser("~/Project/NeuroClone")
-    model_path = os.path.join(base_path, "models", "ayaka.pth")
-    index_path = os.path.join(base_path, "models", "ayaka.index")
-    temp_audio = os.path.join(base_path, "voice", "temp.wav")
-    final_audio = os.path.join(base_path, "voice", "output.wav")
-
-    # 1. Clean up
-    if os.path.exists(temp_audio): os.remove(temp_audio)
-    if os.path.exists(final_audio): os.remove(final_audio)
-
-    # 2. Generate Base Voice (Piper)
-    # Notice the use of shell_safe_text here
-    piper_cmd = (
-        f'echo "{shell_safe_text}" | python3 -m piper '
-        f'--model {base_path}/models/en_US-hfc_female-medium.onnx '
-        f'--output_file {temp_audio} --length_scale 0.85 --noise_scale 0.7 --noise_w 0.8'
-    )
-    
-    try:
-        print(f"Generating base voice with Piper...")
-        subprocess.run(piper_cmd, shell=True, check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Piper Error: {e}")
+# -------------------------------------------------------------------------
+# Speak — Piper TTS → RVC voice conversion → aplay
+# -------------------------------------------------------------------------
+def speak(text: str) -> None:
+    if not text or not text.strip():
         return
 
-    # 3. Convert to Anime Voice via RVC CLI
-    print(f"Applying Ayaka v2 Voice Conversion via CLI...")
-    rvc_cmd = (
-        f"python3 -m rvc_python cli -i {temp_audio} -o {final_audio} "
-        f"-mp {model_path} -ip {index_path} -v v2 -pi 2 -me rmvpe -de cuda:0"
-    )
-    
-    try:
-        subprocess.run(rvc_cmd, shell=True, check=True)
-    except Exception as e:
-        print(f"RVC CLI Error: {e}")
+    torch.cuda.empty_cache()
+    processed = preprocess_text(text)
 
-    # 4. Play the result
-    if os.path.exists(final_audio):
-        os.system(f"aplay {final_audio}")
+    # Escape any double quotes so the shell doesn't choke
+    shell_safe = processed.replace('"', '\\"')
+
+    # Clean up previous audio files
+    for path in [TEMP_AUDIO, FINAL_AUDIO]:
+        if os.path.exists(path):
+            os.remove(path)
+
+    # ------------------------------------------------------------------
+    # Step 1: Generate base voice with Piper TTS
+    # ------------------------------------------------------------------
+    piper_cmd = (
+        f'echo "{shell_safe}" | python3 -m piper '
+        f'--model {PIPER_MODEL} '
+        f'--output_file {TEMP_AUDIO} '
+        f'--length_scale 0.85 --noise_scale 0.7 --noise_w 0.8'
+    )
+
+    try:
+        print("  [TTS] Generating base voice...")
+        subprocess.run(
+            piper_cmd, shell=True, check=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"  [Piper Error]: {e.stderr.decode().strip()}")
+        return
+
+    if not os.path.exists(TEMP_AUDIO):
+        print("  [Piper Error]: temp.wav was not created.")
+        return
+
+    # ------------------------------------------------------------------
+    # Step 2: Convert to Ayaka voice via RVC CLI
+    # ------------------------------------------------------------------
+    rvc_cmd = (
+        f"python3 -m rvc_python cli "
+        f"-i {TEMP_AUDIO} -o {FINAL_AUDIO} "
+        f"-mp {MODEL_PATH} -ip {INDEX_PATH} "
+        f"-v v2 -pi 2 -me rmvpe -de cuda:0"
+    )
+
+    try:
+        print("  [RVC] Applying Ayaka voice conversion...")
+        subprocess.run(
+            rvc_cmd, shell=True, check=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"  [RVC Error]: {e.stderr.decode().strip()}")
+        print("  [Fallback] Playing base Piper voice...")
+        os.system(f"aplay {TEMP_AUDIO}")
+        return
+
+    # ------------------------------------------------------------------
+    # Step 3: Play the final converted audio
+    # ------------------------------------------------------------------
+    if os.path.exists(FINAL_AUDIO):
+        print("  [Audio] Playing...")
+        os.system(f"aplay {FINAL_AUDIO}")
     else:
-        print("RVC conversion failed, playing base Piper voice as backup.")
-        os.system(f"aplay {temp_audio}")
+        print("  [RVC] output.wav missing, falling back to Piper voice.")
+        os.system(f"aplay {TEMP_AUDIO}")

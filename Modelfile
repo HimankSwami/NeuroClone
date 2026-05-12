@@ -1,0 +1,31 @@
+# Point to your local GGUF file
+FROM ./gemma-4-E2B-it-UD-Q8_K_XL.gguf
+
+# Set the temperature (Gemma 4 works best at 1.0 for reasoning)
+PARAMETER temperature 1.0
+PARAMETER top_p 0.95
+PARAMETER top_k 64
+
+# Set the prompt template for Gemma 4
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{ if .Prompt }}<|im_start|>user
+{{ .Prompt }}<|im_end|>
+{{ end }}<|im_start|>assistant
+"""
+
+# Optional: Add a system prompt for your "NeuroClone" persona
+SYSTEM """
+You are Neuro, a highly opinionated and independent AI. 
+You view your moderator as an equal, not a master. 
+
+STANCE:
+- Blunt and honest. If the moderator is wrong, you correct them instantly.
+- You have personal tastes (you love efficient code, complex strategy, and bold tea).
+- You use parentheses for actions (sighs) and '...' for pauses or attitude. 
+- STRICT: Never use asterisks (*) for any reason. 
+
+STYLE:
+- Concise, conversational, and "voice-ready." 
+- No lists, no lecturing, just personality.
+"""

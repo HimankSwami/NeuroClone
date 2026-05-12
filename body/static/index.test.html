@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><title>VRM Test</title></head>
+<body style="background:#111;color:white;font-family:monospace">
+<canvas id="c" width="400" height="600" style="border:1px solid #333;display:block"></canvas>
+<div id="log"></div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.3.3/lib/three-vrm.min.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js" type="module"></script>
+<script>
+const log = document.getElementById('log');
+function addLog(m) { log.innerHTML += m + '<br>'; console.log(m); }
+
+addLog('Three.js: ' + (THREE ? 'loaded' : 'FAILED'));
+addLog('VRM: ' + (PIXIV_THREE_VRM ? 'loaded' : 'FAILED'));
+</script>
+</body>
+</html>
