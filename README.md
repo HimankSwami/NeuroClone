@@ -77,11 +77,6 @@ To enable real-time speech recognition and voice synthesis:
 python main.py --voice
 ```
 
-### Interaction Examples
-- **General Inquiry**: `"What is the current status of the weather in Tokyo?"` (Triggers Web Search)
-- **System Check**: `"How is my system performing?"` (Triggers System Stats)
-- **Agentic Task**: `"claw: Refactor the main loop in main.py"` (Delegates to the Claw Engineer)
-
 ## 🗺️ Roadmap
 
 - [ ] **Advanced Tool-Calling**: Expanded integration with local file systems and smart home APIs.
