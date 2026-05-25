@@ -23,3 +23,13 @@ conda-bld/
 *.gguf
 *.bin
 models/
+
+# RAG / ChromaDB
+data/chroma_db/
+
+Knowledge base docs (optional — ignore if you don't want to commit them)
+# knowledge/
+
+# Neuro audio temp files
+voice/temp.wav
+voice/output.wav
