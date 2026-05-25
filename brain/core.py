@@ -12,6 +12,14 @@ from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
 load_dotenv()  # Loads from .env file in project root
 
+# ── RAG System ──────────────────────────────────────────────────────────────
+try:
+    from rag.rag_engine import NeuroRAG
+    RAG_AVAILABLE = True
+except ImportError:
+    RAG_AVAILABLE = False
+    print("[RAG] rag_engine not found — memory & knowledge disabled.")
+
 # ─── Change this to switch the LLM model ───
 MODEL_NAME = "gemma4-custom:latest"
 
@@ -45,6 +53,22 @@ class NeuroBrain:
             "ram", "cpu", "vram", "gpu", "system", "performance",
             "usage", "temperature", "temp", "memory", "specs"
         ]
+
+        # RAG trigger words — explicit recall / knowledge lookup
+        self.rag_triggers = [
+            "remember", "recall", "you told me", "we discussed", "last time",
+            "do you know about", "what do you know about", "from my documents",
+            "i told you", "earlier you said", "learn from", "sync knowledge"
+        ]
+
+        # Initialise RAG (ChromaDB + Ollama embeddings)
+        self.rag: "NeuroRAG | None" = None
+        if RAG_AVAILABLE:
+            try:
+                self.rag = NeuroRAG()
+                print("[RAG] Memory & knowledge system online.")
+            except Exception as e:
+                print(f"[RAG] Failed to start: {e}")
 
     def delegate_to_claw(self, task: str) -> str:
         """Passes a coding task to the compiled Rust Claw harness."""
@@ -156,19 +180,29 @@ class NeuroBrain:
             return f"\n(Web crawl failed: {e})\n"
 
     # -------------------------------------------------------------------------
+    # RAG Helpers
+    # -------------------------------------------------------------------------
+    def sync_knowledge(self) -> str:
+        """Manually re-scan the knowledge/ folder and index new files."""
+        if not self.rag:
+            return "(RAG is offline — cannot sync knowledge.)"
+        n = self.rag.sync_knowledge_folder()
+        return f"(Synced knowledge folder — {n} new chunks indexed.)" if n else "(Knowledge folder is already up-to-date.)"
+
+    # -------------------------------------------------------------------------
     # Main Think Loop
     # -------------------------------------------------------------------------
     def think(self, user_input: str) -> str:
         web_data = ""
         sys_stats = ""
-        claw_data = ""  # Initialize our new Claw variable safely
+        claw_data = ""
+        rag_context = ""
         lower = user_input.lower()
 
         # 1. Trigger Claw Harness for code tasks
         if lower.startswith("claw:"):
             claw_task = user_input[5:].strip()
             claw_data = self.delegate_to_claw(claw_task)
-            # Rewrite the user input so Llama 3.1 knows to explain the report
             user_input = "Please briefly summarize what the Claw Engineer just found or did."
 
         # 2. Trigger web search
@@ -179,8 +213,35 @@ class NeuroBrain:
         elif any(word in lower for word in self.system_triggers):
             sys_stats = f"[Live System Stats: {self.get_system_stats()}]\n"
 
-        # 4. Safely build the prompt context
+        # 4. Trigger explicit knowledge sync
+        elif "sync knowledge" in lower or ("learn" in lower and "document" in lower):
+            return self.sync_knowledge()
+
+        # 5. RAG — always retrieve silently; surface explicitly on recall triggers
+        if self.rag:
+            is_explicit_recall = any(t in lower for t in self.rag_triggers)
+            try:
+                if is_explicit_recall:
+                    # Explicit recall: show hits directly without going to LLM
+                    hits = self.rag.retrieve_all(user_input)
+                    if hits:
+                        lines = ["(Here's what I remember / know about that:)\n"]
+                        for h in hits[:4]:
+                            src   = h["metadata"].get("source", h["metadata"].get("type", "memory"))
+                            score = round(1 - h["distance"], 2)
+                            lines.append(f"[{src} | {score}] {h['document'][:300]}")
+                        return "\n".join(lines)
+                    return "(I don't have anything stored about that yet.)"
+                else:
+                    # Silent retrieval — inject as context into the prompt
+                    rag_context = self.rag.build_context_block(user_input)
+            except Exception as e:
+                print(f"[RAG] Retrieval error: {e}")
+
+        # 6. Safely build the full prompt context
         context = ""
+        if rag_context:
+            context += rag_context + "\n\n"
         if claw_data:
             context += claw_data + "\n"
         if web_data:
@@ -195,7 +256,7 @@ class NeuroBrain:
             "model": self.model,
             "messages": self.history[-11:],   # Rolling 11-message window
             "stream": False,
-            "keep_alive": "5m",                  # Unload after response (saves VRAM for RVC)
+            "keep_alive": "5m",               # Unload after response (saves VRAM for RVC)
             "options": {
                 "temperature": 0.8
             }
@@ -214,6 +275,14 @@ class NeuroBrain:
                 reply = "(Neuro is speechless... check if the model is pulled correctly.)"
 
             self.history.append({"role": "assistant", "content": reply})
+
+            # 7. Persist this turn to RAG memory (non-blocking best-effort)
+            if self.rag:
+                try:
+                    self.rag.save_memory(user_input, reply)
+                except Exception as e:
+                    print(f"[RAG] Memory save error: {e}")
+
             return reply
 
         except requests.exceptions.ConnectionError:

@@ -1,0 +1,16 @@
+# ── Add these to your existing requirements.txt ──────────────────────────────
+
+# Vector database (local, persistent, no server needed)
+chromadb>=0.5.0
+
+# Embedding model served via Ollama — no extra Python package needed.
+# Just run once:  ollama pull nomic-embed-text
+
+# PDF reading (optional — needed only if you drop PDFs into knowledge/)
+pymupdf>=1.24.0          # imported as `fitz`
+
+# DOCX reading (optional — needed only if you drop .docx files into knowledge/)
+python-docx>=1.1.0
+
+# ── That's it.  Everything else (sentence splitting, chunking, hashing)
+#    is handled in pure Python using the stdlib. ────────────────────────────

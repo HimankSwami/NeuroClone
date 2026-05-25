@@ -58,6 +58,8 @@ def run_neuro(voice_mode: bool = False):
     print(f"  Neuro is online! (mode: {mode})")
     print(f"  Type 'exit' or press Ctrl+C to quit.")
     print(f"  Type 'voice' to enable speech, 'text' for text-only responses.")
+    print(f"  Type 'rag stats' to check memory & knowledge status.")
+    print(f"  Drop files into knowledge/ then say 'sync knowledge' to index them.")
     print(f"{'='*40}\n")
 
     speaks = voice_mode  # default: speak only if started in voice mode
@@ -92,6 +94,13 @@ def run_neuro(voice_mode: bool = False):
             if lower == "text":
                 speaks = False
                 print("  [Text-only mode enabled]")
+                continue
+            if lower == "rag stats":
+                if brain.rag:
+                    s = brain.rag.stats()
+                    print(f"  [RAG] Memories: {s['memory_count']}  |  Knowledge chunks: {s['knowledge_count']}")
+                else:
+                    print("  [RAG] Offline.")
                 continue
 
             # --- Think & Respond ---
