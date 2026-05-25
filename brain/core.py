@@ -217,24 +217,29 @@ class NeuroBrain:
         elif "sync knowledge" in lower or ("learn" in lower and "document" in lower):
             return self.sync_knowledge()
 
-        # 5. RAG — always retrieve silently; surface explicitly on recall triggers
+        # 5. RAG — retrieve context and inject into LLM prompt
         if self.rag:
             is_explicit_recall = any(t in lower for t in self.rag_triggers)
             try:
-                if is_explicit_recall:
-                    # Explicit recall: show hits directly without going to LLM
-                    hits = self.rag.retrieve_all(user_input)
-                    if hits:
-                        lines = ["(Here's what I remember / know about that:)\n"]
-                        for h in hits[:4]:
-                            src   = h["metadata"].get("source", h["metadata"].get("type", "memory"))
-                            score = round(1 - h["distance"], 2)
-                            lines.append(f"[{src} | {score}] {h['document'][:300]}")
-                        return "\n".join(lines)
-                    return "(I don't have anything stored about that yet.)"
-                else:
-                    # Silent retrieval — inject as context into the prompt
-                    rag_context = self.rag.build_context_block(user_input)
+                hits = self.rag.retrieve_all(user_input)
+                if hits:
+                    # Build a clean context block from the hits
+                    snippets = []
+                    for h in hits[:4]:
+                        src = h["metadata"].get("source", h["metadata"].get("type", "memory"))
+                        snippets.append(f"[{src}]: {h['document'][:350]}")
+                    rag_context = "\n".join(snippets)
+
+                    # On explicit recall, add an instruction so Neuro responds conversationally
+                    if is_explicit_recall:
+                        rag_context = (
+                            "[Retrieved from Neuro's memory & knowledge base — "
+                            "respond naturally as if recalling this yourself, "
+                            "do NOT list raw chunks or mention scores/metadata]\n\n"
+                            + rag_context
+                        )
+                elif is_explicit_recall:
+                    return "(sighs) I don't have anything stored about that yet."
             except Exception as e:
                 print(f"[RAG] Retrieval error: {e}")
 

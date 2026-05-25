@@ -220,6 +220,95 @@
         #send-btn:active { transform: scale(0.92); }
         #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         #send-btn svg { width: 20px; height: 20px; }
+
+        /* ── RAG Panel ─────────────────────────────────────────────────── */
+        .rag-panel {
+            width: 260px;
+            min-width: 260px;
+            background: var(--bg-card);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            overflow-x: hidden;
+            position: relative;
+        }
+        .rag-panel::-webkit-scrollbar { width: 3px; }
+        .rag-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        .rag-panel::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            z-index: 1;
+        }
+        .rag-section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+        .rag-section-title {
+            font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+            color: var(--text-dim); margin-bottom: 10px;
+            display: flex; align-items: center; gap: 7px;
+        }
+        .rag-online-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: #22c55e; box-shadow: 0 0 6px #22c55e;
+            flex-shrink: 0; animation: rag-pulse 2.4s ease-in-out infinite;
+        }
+        .rag-online-dot.offline { background: #ef4444; box-shadow: 0 0 6px #ef4444; animation: none; }
+        @keyframes rag-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+        .rag-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .rag-stat {
+            background: #0a0a14; border: 1px solid var(--border);
+            border-radius: 8px; padding: 10px 10px 8px;
+        }
+        .rag-stat-label { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); font-family: monospace; }
+        .rag-stat-value {
+            font-size: 26px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            line-height: 1.1; margin-top: 2px;
+        }
+        .rag-dropzone {
+            border: 1.5px dashed var(--border); border-radius: 8px;
+            padding: 16px 10px; text-align: center; cursor: pointer;
+            position: relative; display: flex; flex-direction: column;
+            align-items: center; gap: 5px;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .rag-dropzone:hover, .rag-dropzone.drag-over {
+            border-color: var(--accent); background: rgba(124,92,252,0.05);
+        }
+        .rag-dropzone input[type=file] {
+            position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+        }
+        .rag-drop-icon { font-size: 20px; }
+        .rag-drop-text { font-size: 10px; color: var(--text-dim); line-height: 1.5; }
+        .rag-drop-types { font-size: 8.5px; color: var(--accent); letter-spacing: 0.06em; font-family: monospace; }
+        .rag-upload-status {
+            display: none; flex-direction: column; gap: 6px;
+            margin-top: 10px; padding: 10px;
+            background: #0a0a14; border: 1px solid var(--border); border-radius: 8px;
+        }
+        .rag-upload-status.visible { display: flex; }
+        .rag-upload-filename { font-size: 10px; color: var(--text); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rag-upload-bar-wrap { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+        .rag-upload-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 2px; transition: width 0.3s ease; }
+        .rag-upload-msg { font-size: 9.5px; font-family: monospace; }
+        .rag-upload-msg.ok  { color: #22c55e; }
+        .rag-upload-msg.err { color: #ef4444; }
+        .rag-upload-msg.inf { color: var(--accent2); }
+        .rag-sync-btn {
+            width: 100%; background: none; border: 1px solid var(--border); border-radius: 8px;
+            color: var(--text-dim); font-family: monospace; font-size: 9.5px;
+            letter-spacing: 0.1em; text-transform: uppercase; padding: 9px 12px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            gap: 7px; transition: color 0.2s, border-color 0.2s, background 0.2s; margin-top: 10px;
+        }
+        .rag-sync-btn:hover { color: var(--accent2); border-color: var(--accent2); background: rgba(92,225,230,0.04); }
+        .rag-sync-btn.spinning .rag-sync-icon { display: inline-block; animation: spin 0.9s linear infinite; }
+        .rag-hints { display: flex; flex-direction: column; gap: 7px; }
+        .rag-hint { display: flex; flex-direction: column; gap: 2px; }
+        .rag-hint-cmd { font-family: monospace; font-size: 10px; color: var(--accent2); }
+        .rag-hint-desc { font-size: 9.5px; color: var(--text-dim); line-height: 1.4; }
     </style>
 </head>
 <body>
@@ -238,7 +327,7 @@
     <div class="chat-panel">
         <div class="chat-header">
             <h1><span id="connection-dot"></span><span>Neuro</span></h1>
-            <p>type <b style="color:var(--accent)">voice</b> or <b style="color:var(--accent)">text</b> to toggle speech output</p>
+            <p>type <b style="color:var(--accent2)">rag stats</b> · <b style="color:var(--accent)">voice</b> · <b style="color:var(--accent)">text</b> · <b style="color:var(--accent2)">sync knowledge</b></p>
         </div>
         <div class="messages" id="messages"></div>
         <div class="input-bar">
@@ -250,6 +339,72 @@
                 </svg>
             </button>
         </div>
+    </div>
+
+    <div class="rag-panel">
+
+        <!-- Status + Counters -->
+        <div class="rag-section">
+            <div class="rag-section-title">
+                <div class="rag-online-dot" id="rag-dot"></div>
+                RAG System
+            </div>
+            <div class="rag-stats-grid">
+                <div class="rag-stat">
+                    <div class="rag-stat-label">Memories</div>
+                    <div class="rag-stat-value" id="rag-mem">—</div>
+                </div>
+                <div class="rag-stat">
+                    <div class="rag-stat-label">Knowledge</div>
+                    <div class="rag-stat-value" id="rag-know">—</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- File Upload -->
+        <div class="rag-section">
+            <div class="rag-section-title">Add to Knowledge Base</div>
+            <div class="rag-dropzone" id="rag-dropzone">
+                <input type="file" id="rag-file-input"
+                       accept=".txt,.md,.pdf,.docx,.py,.json,.csv" multiple />
+                <div class="rag-drop-icon">⬆</div>
+                <div class="rag-drop-text">Drop files or click to browse</div>
+                <div class="rag-drop-types">.txt · .md · .pdf · .docx · .py · .json · .csv</div>
+            </div>
+            <div class="rag-upload-status" id="rag-upload-status">
+                <div class="rag-upload-filename" id="rag-upload-filename">—</div>
+                <div class="rag-upload-bar-wrap"><div class="rag-upload-bar" id="rag-upload-bar"></div></div>
+                <div class="rag-upload-msg inf" id="rag-upload-msg">Uploading…</div>
+            </div>
+            <button class="rag-sync-btn" id="rag-sync-btn">
+                <span class="rag-sync-icon">↻</span>
+                <span>Sync knowledge/ folder</span>
+            </button>
+        </div>
+
+        <!-- Commands -->
+        <div class="rag-section">
+            <div class="rag-section-title">Commands</div>
+            <div class="rag-hints">
+                <div class="rag-hint">
+                    <span class="rag-hint-cmd">rag stats</span>
+                    <span class="rag-hint-desc">refresh memory &amp; knowledge counts</span>
+                </div>
+                <div class="rag-hint">
+                    <span class="rag-hint-cmd">sync knowledge</span>
+                    <span class="rag-hint-desc">re-index the knowledge/ folder</span>
+                </div>
+                <div class="rag-hint">
+                    <span class="rag-hint-cmd">recall [topic]</span>
+                    <span class="rag-hint-desc">surface relevant past memories</span>
+                </div>
+                <div class="rag-hint">
+                    <span class="rag-hint-cmd">voice / text</span>
+                    <span class="rag-hint-desc">toggle TTS output on or off</span>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script type="importmap">
@@ -514,8 +669,17 @@
                     sendBtn.disabled = false;
                     chatInput.disabled = false;
                 }
+                // RAG live updates
+                if (d.type === 'rag_stats' || d.type === 'status') {
+                    const mem  = d.memory_count    ?? d.rag?.memory_count;
+                    const know = d.knowledge_count ?? d.rag?.knowledge_count;
+                    if (mem  !== undefined) document.getElementById('rag-mem').textContent  = mem;
+                    if (know !== undefined) document.getElementById('rag-know').textContent = know;
+                    document.getElementById('rag-dot').classList.remove('offline');
+                }
             } catch(err) { console.error('WebSocket parse error:', err); }
         };
+        window.ws = ws;   // expose for RAG panel
     }
     connect();
 
@@ -535,6 +699,94 @@
     sendBtn.addEventListener('click', sendMessage);
     chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
 
+    </script>
+
+    <script>
+    (function () {
+        async function fetchStats() {
+            try {
+                const res  = await fetch('/api/rag/stats');
+                if (!res.ok) { document.getElementById('rag-dot').classList.add('offline'); return; }
+                const json = await res.json();
+                document.getElementById('rag-mem').textContent  = json.memory_count    ?? '—';
+                document.getElementById('rag-know').textContent = json.knowledge_count ?? '—';
+                document.getElementById('rag-dot').classList.remove('offline');
+            } catch (_) {
+                document.getElementById('rag-dot').classList.add('offline');
+            }
+        }
+        fetchStats();
+        setInterval(fetchStats, 15000);
+
+        async function uploadFile(file) {
+            const status = document.getElementById('rag-upload-status');
+            const fname  = document.getElementById('rag-upload-filename');
+            const bar    = document.getElementById('rag-upload-bar');
+            const msg    = document.getElementById('rag-upload-msg');
+
+            status.classList.add('visible');
+            fname.textContent = file.name;
+            bar.style.width   = '0%';
+            msg.className     = 'rag-upload-msg inf';
+            msg.textContent   = 'Uploading…';
+
+            let prog = 0;
+            const ticker = setInterval(() => {
+                prog = Math.min(prog + Math.random() * 14, 88);
+                bar.style.width = prog + '%';
+            }, 150);
+
+            try {
+                const form = new FormData();
+                form.append('file', file);
+                const res  = await fetch('/api/rag/upload', { method: 'POST', body: form });
+                const json = await res.json();
+                clearInterval(ticker);
+                bar.style.width = '100%';
+                if (!res.ok) {
+                    msg.className   = 'rag-upload-msg err';
+                    msg.textContent = json.error || 'Upload failed.';
+                    return;
+                }
+                msg.className   = 'rag-upload-msg ok';
+                msg.textContent = '✓ ' + json.filename + ' — ' + json.chunks_indexed + ' chunks';
+                fetchStats();
+            } catch (_) {
+                clearInterval(ticker);
+                msg.className   = 'rag-upload-msg err';
+                msg.textContent = 'Network error — is Neuro running?';
+            }
+            setTimeout(() => status.classList.remove('visible'), 4500);
+        }
+
+        const zone  = document.getElementById('rag-dropzone');
+        const input = document.getElementById('rag-file-input');
+        input.addEventListener('change', () => { [...input.files].forEach(uploadFile); input.value = ''; });
+        zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+        zone.addEventListener('dragleave', ()  => zone.classList.remove('drag-over'));
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            [...e.dataTransfer.files].forEach(uploadFile);
+        });
+
+        const syncBtn = document.getElementById('rag-sync-btn');
+        syncBtn.addEventListener('click', async () => {
+            syncBtn.classList.add('spinning');
+            syncBtn.disabled = true;
+            try {
+                const res  = await fetch('/api/rag/sync', { method: 'POST' });
+                const json = await res.json();
+                if (json.total_knowledge !== undefined)
+                    document.getElementById('rag-know').textContent = json.total_knowledge;
+                syncBtn.style.color       = '#22c55e';
+                syncBtn.style.borderColor = '#22c55e';
+                setTimeout(() => { syncBtn.style.color = ''; syncBtn.style.borderColor = ''; }, 1400);
+            } catch (_) {}
+            syncBtn.classList.remove('spinning');
+            syncBtn.disabled = false;
+        });
+    })();
     </script>
 </body>
 </html>
