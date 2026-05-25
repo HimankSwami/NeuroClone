@@ -81,8 +81,8 @@ python main.py --voice
 
 - [ ] **Advanced Tool-Calling**: Expanded integration with local file systems and smart home APIs.
 - [ ] **UI Refinements**: A polished, dedicated desktop application.
-- ✅ **RAG Implementation**: Retrieval-Augmented Generation for deep knowledge of your personal documents.
-- [ ] **Vector Database**: Long-term, semantic memory storage using a local vector DB.
+ ✅ **RAG Implementation**: Retrieval-Augmented Generation for deep knowledge of your personal documents.
+ ✅ **Vector Database**: Long-term, semantic memory storage using a local vector DB.
 
 ## 🤝 Contributing
 
