@@ -26,6 +26,14 @@
             --glow: 0 0 30px rgba(124, 92, 252, 0.12);
         }
 
+        .text-accent {
+            color: var(--accent);
+        }
+
+        .text-accent2 {
+            color: var(--accent2);
+        }
+
         body {
             background: var(--bg);
             color: var(--text);
@@ -668,8 +676,8 @@
     <div class="chat-panel">
         <div class="chat-header">
             <h1><span id="connection-dot"></span><span>Neuro</span></h1>
-            <p>type <b style="color:var(--accent2)">rag stats</b> · <b style="color:var(--accent)">voice</b> · <b
-                    style="color:var(--accent)">text</b> · <b style="color:var(--accent2)">sync knowledge</b></p>
+            <p>type <b class="text-accent2">rag stats</b> · <b class="text-accent">voice</b> · <b
+                    class="text-accent">text</b> · <b class="text-accent2">sync knowledge</b></p>
         </div>
         <div class="messages" id="messages"></div>
         <div class="input-bar">
