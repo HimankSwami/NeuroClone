@@ -46,3 +46,6 @@ data/chroma_db/
 
 # Misc
 bool:
+.env
+data/chroma_db/
+data/chroma_db/
