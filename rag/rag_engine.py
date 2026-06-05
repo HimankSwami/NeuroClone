@@ -90,13 +90,16 @@ class NeuroRAG:
         turn_text = f"User: {user_msg}\nNeuro: {assistant_msg}"
         doc_id    = _uid(turn_text)
         timestamp = datetime.utcnow().isoformat()
-
-        self._memory.upsert(
-            ids=[doc_id],
-            documents=[turn_text],
-            metadatas=[{"timestamp": timestamp, "type": "conversation"}],
-        )
-        logger.debug("Memory saved: %s", doc_id)
+        try:
+            self._memory.upsert(
+                ids=[doc_id],
+                documents=[turn_text],
+                metadatas=[{"timestamp": timestamp, "type": "conversation"}],
+            )
+            logger.debug("Memory saved: %s", doc_id)
+        except Exception as e:
+            logger.warning("Memory save failed (collection desynced?): %s", e)
+            self._safe_count(self._memory, "memory")  # triggers recreation
 
     def retrieve_memory(self, query: str, top_k: int = MEMORY_TOP_K) -> list[dict]:
         """Fetch relevant past conversation turns for a query."""
@@ -157,21 +160,46 @@ class NeuroRAG:
 
     def stats(self) -> dict:
         return {
-            "memory_count":    self._memory.count(),
-            "knowledge_count": self._knowledge.count(),
+            "memory_count":    self._safe_count(self._memory, "memory"),
+            "knowledge_count": self._safe_count(self._knowledge, "knowledge"),
             "knowledge_dir":   str(KNOWLEDGE_DIR.resolve()),
             "chroma_dir":      str(CHROMA_DIR.resolve()),
         }
 
     # ── Internals ──────────────────────────────────────────────────────────
 
+    def _safe_count(self, collection, name: str) -> int:
+        """Count with auto-recovery if ChromaDB collection UUID desyncs."""
+        try:
+            return collection.count()
+        except Exception:
+            logger.warning("Collection '%s' desynced — recreating.", name)
+            try:
+                new_col = self._client.get_or_create_collection(
+                    name=name,
+                    embedding_function=self._embed_fn,
+                    metadata={"hnsw:space": "cosine"},
+                )
+                if name == "memory":
+                    self._memory = new_col
+                else:
+                    self._knowledge = new_col
+                return 0
+            except Exception as e:
+                logger.error("Failed to recreate collection '%s': %s", name, e)
+                return 0
+
     def _query(self, collection, query: str, top_k: int) -> list[dict]:
-        if collection.count() == 0:
+        try:
+            count = collection.count()
+        except Exception:
+            return []
+        if count == 0:
             return []
         try:
             results = collection.query(
                 query_texts=[query],
-                n_results=min(top_k, collection.count()),
+                n_results=min(top_k, count),
             )
             hits = []
             for doc, meta, dist, uid in zip(
