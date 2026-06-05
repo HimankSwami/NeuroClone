@@ -1,4 +1,4 @@
-# Python junk
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -10,26 +10,39 @@ env/
 .conda/
 conda-bld/
 
-# Audio Files (Neuro's voice outputs)
+# Environment — NEVER commit API keys
+.env
+
+# Audio files (generated at runtime)
 *.wav
 *.mp3
+voice/temp.wav
+voice/output.wav
+voice/playing.flag
 
-# Hardware/OS junk
+# Large model files (not for git)
+*.gguf
+*.bin
+*.pth
+*.index
+models/
+
+# 3D avatar files (too large for git — store separately)
+*.glb
+*.vrm
+body/static/*.glb
+body/static/*.vrm
+
+# RAG / ChromaDB (rebuilt at runtime)
+data/chroma_db/
+
+# Knowledge base docs (optional — uncomment to ignore)
+# knowledge/
+
+# OS / editor junk
 .DS_Store
 .vscode/
 .idea/
 
-# Large Model Files (Ollama handles these, don't put them in Git)
-*.gguf
-*.bin
-models/
-
-# RAG / ChromaDB
-data/chroma_db/
-
-Knowledge base docs (optional — ignore if you don't want to commit them)
-# knowledge/
-
-# Neuro audio temp files
-voice/temp.wav
-voice/output.wav
+# Misc
+bool:

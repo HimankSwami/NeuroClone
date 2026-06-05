@@ -44,6 +44,22 @@ async def index(request: Request):
         return f.read()
 
 
+import wave, os
+
+@app.get("/api/audio_duration")
+def audio_duration():
+    path = "voice/output.wav"
+    if not os.path.exists(path):
+        return {"duration": 0, "delay_ms": 3000}
+    with wave.open(path, 'r') as f:
+        duration = f.getnframes() / f.getframerate()
+    return {"duration": duration, "delay_ms": 3000}
+
+@app.get("/api/audio_status")
+def audio_status():
+    flag = os.path.join(PROJECT_ROOT, "voice", "playing.flag")
+    return {"playing": os.path.exists(flag)}
+
 @app.get("/api/health")
 async def health():
     rag_stats = {}
@@ -99,7 +115,9 @@ async def chat(request: Request):
     user_input = body.get("message", "").strip()
     if not user_input:
         return {"error": "Empty message"}
-    response = brain.think(user_input)
+    # This offloads the heavy processing to a background thread
+    # so FastAPI can keep listening to the other devices
+    response = await asyncio.to_thread(brain.think, user_input)
     response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
     return {"response": response}
 
@@ -157,31 +175,35 @@ async def websocket_chat(websocket: WebSocket):
             # ── Normal chat ─────────────────────────────────────────────
             await websocket.send_json({"type": "state", "state": "thinking"})
 
-            response = brain.think(user_input)
-            response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
+            try:
+                response = await asyncio.to_thread(brain.think, user_input)
+                response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
 
-            # Push live RAG stats after every reply
-            if brain.rag:
-                s = brain.rag.stats()
-                await websocket.send_json({"type": "rag_stats", **s})
+                # Push live RAG stats after every reply
+                if brain.rag:
+                    s = brain.rag.stats()
+                    await websocket.send_json({"type": "rag_stats", **s})
 
-            words = response.split()
-            spoken = ""
-            for i, word in enumerate(words):
-                spoken += word + " "
-                await websocket.send_json({
-                    "type": "text",
-                    "state": "speaking",
-                    "text": spoken,
-                    "word_progress": (i + 1) / len(words) * 100,
-                })
-                await asyncio.sleep(0.06)
+                words = response.split()
+                spoken = ""
+                for i, word in enumerate(words):
+                    spoken += word + " "
+                    await websocket.send_json({
+                        "type": "text",
+                        "state": "speaking",
+                        "text": spoken,
+                        "word_progress": (i + 1) / len(words) * 100,
+                    })
+                    await asyncio.sleep(0.06)
 
-            if voice_enabled:
-                print(f"  [TTS] Speaking response...")
-                threading.Thread(target=_speak_thread, args=(response,), daemon=True).start()
-
-            await websocket.send_json({"type": "state", "state": "idle"})
+                if voice_enabled:
+                    print(f"  [TTS] Speaking response...")
+                    threading.Thread(target=_speak_thread, args=(response,), daemon=True).start()
+            except Exception as e:
+                print(f"Error processing chat: {e}")
+                await websocket.send_json({"type": "announcement", "text": f"An error occurred: {e}"})
+            finally:
+                await websocket.send_json({"type": "state", "state": "idle"})
 
     except WebSocketDisconnect:
         print("Client disconnected from WebSocket.")

@@ -1,22 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Neuro — VTuber Interface</title>
     <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
         :root {
-            --bg:        #06060e;
-            --bg-card:   #0c0c16;
-            --border:    #161625;
-            --accent:    #7c5cfc;
-            --accent2:   #5ce1e6;
-            --text:      #e4e2f4;
-            --text-dim:  #5d5b78;
-            --input-bg:  #12121f;
-            --glow:      0 0 30px rgba(124,92,252,0.12);
+            --bg: #06060e;
+            --bg-card: #0c0c16;
+            --border: #161625;
+            --accent: #7c5cfc;
+            --accent2: #5ce1e6;
+            --text: #e4e2f4;
+            --text-dim: #5d5b78;
+            --input-bg: #12121f;
+            --glow: 0 0 30px rgba(124, 92, 252, 0.12);
         }
 
         body {
@@ -40,6 +47,29 @@
             overflow: hidden;
         }
 
+        /* Vignette overlay — darkens edges like a portrait lens */
+        .avatar-panel::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+            background: radial-gradient(ellipse 85% 90% at 50% 45%,
+                    transparent 40%,
+                    rgba(4, 3, 10, 0.55) 100%);
+        }
+
+        /* Subtle purple edge glow — matches rim light in reference */
+        .avatar-panel::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+            box-shadow: inset 0 0 80px rgba(124, 92, 252, 0.13),
+                inset 0 0 30px rgba(92, 225, 230, 0.06);
+        }
+
         #vrm-canvas {
             position: absolute;
             inset: 0;
@@ -59,16 +89,26 @@
             background: var(--bg-card);
             transition: opacity 0.6s ease;
         }
-        .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
 
         .spinner {
-            width: 40px; height: 40px;
+            width: 40px;
+            height: 40px;
             border: 3px solid var(--border);
             border-top-color: var(--accent);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
 
         .loading-overlay p {
             margin-top: 16px;
@@ -80,13 +120,15 @@
         .status-bar {
             position: absolute;
             bottom: 20px;
-            left: 0; right: 0;
+            left: 0;
+            right: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 10px;
             z-index: 3;
         }
+
         .status-label {
             padding: 5px 18px;
             border-radius: 20px;
@@ -94,14 +136,35 @@
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1.8px;
-            background: rgba(12,12,22,0.7);
+            background: rgba(12, 12, 22, 0.7);
+            -webkit-backdrop-filter: blur(10px);
             backdrop-filter: blur(10px);
             color: var(--text-dim);
             transition: all 0.5s ease;
         }
-        .status-label.speaking { background: rgba(92,225,230,0.1); color: var(--accent2); }
-        .status-label.thinking { background: rgba(124,92,252,0.1); color: var(--accent); animation: status-pulse 1.5s ease-in-out infinite; }
-        @keyframes status-pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+        .status-label.speaking {
+            background: rgba(92, 225, 230, 0.1);
+            color: var(--accent2);
+        }
+
+        .status-label.thinking {
+            background: rgba(124, 92, 252, 0.1);
+            color: var(--accent);
+            animation: status-pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes status-pulse {
+
+            0%,
+            100% {
+                opacity: 0.6;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
 
         .chat-panel {
             flex: 1;
@@ -114,27 +177,37 @@
             padding: 20px 28px 16px;
             border-bottom: 1px solid var(--border);
         }
+
         .chat-header h1 {
             font-size: 18px;
             font-weight: 700;
             letter-spacing: 0.5px;
         }
-        .chat-header h1 span { color: var(--accent); }
+
+        .chat-header h1 span {
+            color: var(--accent);
+        }
+
         .chat-header p {
             font-size: 11px;
             color: var(--text-dim);
             margin-top: 4px;
         }
+
         #connection-dot {
             display: inline-block;
-            width: 7px; height: 7px;
+            width: 7px;
+            height: 7px;
             border-radius: 50%;
             background: #ef4444;
             margin-right: 6px;
             vertical-align: middle;
             transition: background 0.3s;
         }
-        #connection-dot.connected { background: #22c55e; }
+
+        #connection-dot.connected {
+            background: #22c55e;
+        }
 
         .messages {
             flex: 1;
@@ -145,8 +218,15 @@
             gap: 12px;
             scroll-behavior: smooth;
         }
-        .messages::-webkit-scrollbar { width: 4px; }
-        .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .messages::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .messages::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
 
         .msg {
             max-width: 70%;
@@ -156,11 +236,45 @@
             line-height: 1.65;
             animation: fade-up 0.3s ease;
         }
-        @keyframes fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        .msg.user { align-self: flex-end; background: #18142f; border-bottom-right-radius: 4px; }
-        .msg.neuro { align-self: flex-start; background: #101018; border: 1px solid var(--border); color: #cccce0; border-bottom-left-radius: 4px; }
-        .msg.neuro .label { font-size: 10px; color: var(--accent); font-weight: 700; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.8px; }
-        .msg.neuro .text-content { white-space: pre-wrap; }
+
+        @keyframes fade-up {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .msg.user {
+            align-self: flex-end;
+            background: #18142f;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg.neuro {
+            align-self: flex-start;
+            background: #101018;
+            border: 1px solid var(--border);
+            color: #cccce0;
+            border-bottom-left-radius: 4px;
+        }
+
+        .msg.neuro .label {
+            font-size: 10px;
+            color: var(--accent);
+            font-weight: 700;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        .msg.neuro .text-content {
+            white-space: pre-wrap;
+        }
 
         .typing-indicator {
             align-self: flex-start;
@@ -173,15 +287,37 @@
             border-radius: 16px;
             border-bottom-left-radius: 4px;
         }
+
         .typing-dot {
-            width: 6px; height: 6px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
             background: var(--accent);
             animation: typing-bounce 1.2s ease-in-out infinite;
         }
-        .typing-dot:nth-child(2) { animation-delay: 0.15s; }
-        .typing-dot:nth-child(3) { animation-delay: 0.3s; }
-        @keyframes typing-bounce { 0%,60%,100% { transform: translateY(0); opacity: 0.3; } 30% { transform: translateY(-6px); opacity: 1; } }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.15s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+
+        @keyframes typing-bounce {
+
+            0%,
+            60%,
+            100% {
+                transform: translateY(0);
+                opacity: 0.3;
+            }
+
+            30% {
+                transform: translateY(-6px);
+                opacity: 1;
+            }
+        }
 
         .input-bar {
             padding: 16px 28px;
@@ -189,6 +325,7 @@
             display: flex;
             gap: 10px;
         }
+
         #chat-input {
             flex: 1;
             padding: 13px 20px;
@@ -200,12 +337,23 @@
             outline: none;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
-        #chat-input:focus { border-color: var(--accent); box-shadow: var(--glow); }
-        #chat-input::placeholder { color: var(--text-dim); }
-        #chat-input:disabled { opacity: 0.5; }
+
+        #chat-input:focus {
+            border-color: var(--accent);
+            box-shadow: var(--glow);
+        }
+
+        #chat-input::placeholder {
+            color: var(--text-dim);
+        }
+
+        #chat-input:disabled {
+            opacity: 0.5;
+        }
 
         #send-btn {
-            width: 46px; height: 46px;
+            width: 46px;
+            height: 46px;
             border-radius: 50%;
             border: none;
             background: var(--accent);
@@ -216,10 +364,24 @@
             justify-content: center;
             transition: background 0.15s, transform 0.1s;
         }
-        #send-btn:hover { background: #6a4ae8; }
-        #send-btn:active { transform: scale(0.92); }
-        #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        #send-btn svg { width: 20px; height: 20px; }
+
+        #send-btn:hover {
+            background: #6a4ae8;
+        }
+
+        #send-btn:active {
+            transform: scale(0.92);
+        }
+
+        #send-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        #send-btn svg {
+            width: 20px;
+            height: 20px;
+        }
 
         /* ── RAG Panel ─────────────────────────────────────────────────── */
         .rag-panel {
@@ -233,84 +395,263 @@
             overflow-x: hidden;
             position: relative;
         }
-        .rag-panel::-webkit-scrollbar { width: 3px; }
-        .rag-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        .rag-panel::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .rag-panel::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
         .rag-panel::before {
             content: '';
             position: absolute;
-            top: 0; left: 0; right: 0; height: 2px;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
             background: linear-gradient(90deg, var(--accent), var(--accent2));
             z-index: 1;
         }
-        .rag-section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+
+        .rag-section {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
         .rag-section-title {
-            font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
-            color: var(--text-dim); margin-bottom: 10px;
-            display: flex; align-items: center; gap: 7px;
+            font-size: 9px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 7px;
         }
+
         .rag-online-dot {
-            width: 6px; height: 6px; border-radius: 50%;
-            background: #22c55e; box-shadow: 0 0 6px #22c55e;
-            flex-shrink: 0; animation: rag-pulse 2.4s ease-in-out infinite;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #22c55e;
+            box-shadow: 0 0 6px #22c55e;
+            flex-shrink: 0;
+            animation: rag-pulse 2.4s ease-in-out infinite;
         }
-        .rag-online-dot.offline { background: #ef4444; box-shadow: 0 0 6px #ef4444; animation: none; }
-        @keyframes rag-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
-        .rag-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+        .rag-online-dot.offline {
+            background: #ef4444;
+            box-shadow: 0 0 6px #ef4444;
+            animation: none;
+        }
+
+        @keyframes rag-pulse {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: 0.35
+            }
+        }
+
+        .rag-stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
         .rag-stat {
-            background: #0a0a14; border: 1px solid var(--border);
-            border-radius: 8px; padding: 10px 10px 8px;
+            background: #0a0a14;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 10px 8px;
         }
-        .rag-stat-label { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); font-family: monospace; }
+
+        .rag-stat-label {
+            font-size: 8px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            font-family: monospace;
+        }
+
         .rag-stat-value {
-            font-size: 26px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+            font-size: 26px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
             background: linear-gradient(135deg, var(--accent), var(--accent2));
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            line-height: 1.1; margin-top: 2px;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            line-height: 1.1;
+            margin-top: 2px;
         }
+
         .rag-dropzone {
-            border: 1.5px dashed var(--border); border-radius: 8px;
-            padding: 16px 10px; text-align: center; cursor: pointer;
-            position: relative; display: flex; flex-direction: column;
-            align-items: center; gap: 5px;
+            border: 1.5px dashed var(--border);
+            border-radius: 8px;
+            padding: 16px 10px;
+            text-align: center;
+            cursor: pointer;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
             transition: border-color 0.2s, background 0.2s;
         }
-        .rag-dropzone:hover, .rag-dropzone.drag-over {
-            border-color: var(--accent); background: rgba(124,92,252,0.05);
+
+        .rag-dropzone:hover,
+        .rag-dropzone.drag-over {
+            border-color: var(--accent);
+            background: rgba(124, 92, 252, 0.05);
         }
+
         .rag-dropzone input[type=file] {
-            position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
         }
-        .rag-drop-icon { font-size: 20px; }
-        .rag-drop-text { font-size: 10px; color: var(--text-dim); line-height: 1.5; }
-        .rag-drop-types { font-size: 8.5px; color: var(--accent); letter-spacing: 0.06em; font-family: monospace; }
+
+        .rag-drop-icon {
+            font-size: 20px;
+        }
+
+        .rag-drop-text {
+            font-size: 10px;
+            color: var(--text-dim);
+            line-height: 1.5;
+        }
+
+        .rag-drop-types {
+            font-size: 8.5px;
+            color: var(--accent);
+            letter-spacing: 0.06em;
+            font-family: monospace;
+        }
+
         .rag-upload-status {
-            display: none; flex-direction: column; gap: 6px;
-            margin-top: 10px; padding: 10px;
-            background: #0a0a14; border: 1px solid var(--border); border-radius: 8px;
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 10px;
+            padding: 10px;
+            background: #0a0a14;
+            border: 1px solid var(--border);
+            border-radius: 8px;
         }
-        .rag-upload-status.visible { display: flex; }
-        .rag-upload-filename { font-size: 10px; color: var(--text); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .rag-upload-bar-wrap { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
-        .rag-upload-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 2px; transition: width 0.3s ease; }
-        .rag-upload-msg { font-size: 9.5px; font-family: monospace; }
-        .rag-upload-msg.ok  { color: #22c55e; }
-        .rag-upload-msg.err { color: #ef4444; }
-        .rag-upload-msg.inf { color: var(--accent2); }
+
+        .rag-upload-status.visible {
+            display: flex;
+        }
+
+        .rag-upload-filename {
+            font-size: 10px;
+            color: var(--text);
+            font-family: monospace;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .rag-upload-bar-wrap {
+            height: 3px;
+            background: var(--border);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .rag-upload-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        .rag-upload-msg {
+            font-size: 9.5px;
+            font-family: monospace;
+        }
+
+        .rag-upload-msg.ok {
+            color: #22c55e;
+        }
+
+        .rag-upload-msg.err {
+            color: #ef4444;
+        }
+
+        .rag-upload-msg.inf {
+            color: var(--accent2);
+        }
+
         .rag-sync-btn {
-            width: 100%; background: none; border: 1px solid var(--border); border-radius: 8px;
-            color: var(--text-dim); font-family: monospace; font-size: 9.5px;
-            letter-spacing: 0.1em; text-transform: uppercase; padding: 9px 12px;
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-            gap: 7px; transition: color 0.2s, border-color 0.2s, background 0.2s; margin-top: 10px;
+            width: 100%;
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-dim);
+            font-family: monospace;
+            font-size: 9.5px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            padding: 9px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            transition: color 0.2s, border-color 0.2s, background 0.2s;
+            margin-top: 10px;
         }
-        .rag-sync-btn:hover { color: var(--accent2); border-color: var(--accent2); background: rgba(92,225,230,0.04); }
-        .rag-sync-btn.spinning .rag-sync-icon { display: inline-block; animation: spin 0.9s linear infinite; }
-        .rag-hints { display: flex; flex-direction: column; gap: 7px; }
-        .rag-hint { display: flex; flex-direction: column; gap: 2px; }
-        .rag-hint-cmd { font-family: monospace; font-size: 10px; color: var(--accent2); }
-        .rag-hint-desc { font-size: 9.5px; color: var(--text-dim); line-height: 1.4; }
+
+        .rag-sync-btn:hover {
+            color: var(--accent2);
+            border-color: var(--accent2);
+            background: rgba(92, 225, 230, 0.04);
+        }
+
+        .rag-sync-btn.spinning .rag-sync-icon {
+            display: inline-block;
+            animation: spin 0.9s linear infinite;
+        }
+
+        .rag-hints {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .rag-hint {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .rag-hint-cmd {
+            font-family: monospace;
+            font-size: 10px;
+            color: var(--accent2);
+        }
+
+        .rag-hint-desc {
+            font-size: 9.5px;
+            color: var(--text-dim);
+            line-height: 1.4;
+        }
     </style>
 </head>
+
 <body>
 
     <div class="avatar-panel">
@@ -327,15 +668,17 @@
     <div class="chat-panel">
         <div class="chat-header">
             <h1><span id="connection-dot"></span><span>Neuro</span></h1>
-            <p>type <b style="color:var(--accent2)">rag stats</b> · <b style="color:var(--accent)">voice</b> · <b style="color:var(--accent)">text</b> · <b style="color:var(--accent2)">sync knowledge</b></p>
+            <p>type <b style="color:var(--accent2)">rag stats</b> · <b style="color:var(--accent)">voice</b> · <b
+                    style="color:var(--accent)">text</b> · <b style="color:var(--accent2)">sync knowledge</b></p>
         </div>
         <div class="messages" id="messages"></div>
         <div class="input-bar">
             <input id="chat-input" type="text" placeholder="Say something..." autocomplete="off" />
-            <button id="send-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"/>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            <button id="send-btn" title="Send message" aria-label="Send message">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13" />
+                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
                 </svg>
             </button>
         </div>
@@ -365,15 +708,17 @@
         <div class="rag-section">
             <div class="rag-section-title">Add to Knowledge Base</div>
             <div class="rag-dropzone" id="rag-dropzone">
-                <input type="file" id="rag-file-input"
-                       accept=".txt,.md,.pdf,.docx,.py,.json,.csv" multiple />
+                <input type="file" id="rag-file-input" title="Upload files to knowledge base"
+                    aria-label="Upload files to knowledge base" accept=".txt,.md,.pdf,.docx,.py,.json,.csv" multiple />
                 <div class="rag-drop-icon">⬆</div>
                 <div class="rag-drop-text">Drop files or click to browse</div>
                 <div class="rag-drop-types">.txt · .md · .pdf · .docx · .py · .json · .csv</div>
             </div>
             <div class="rag-upload-status" id="rag-upload-status">
                 <div class="rag-upload-filename" id="rag-upload-filename">—</div>
-                <div class="rag-upload-bar-wrap"><div class="rag-upload-bar" id="rag-upload-bar"></div></div>
+                <div class="rag-upload-bar-wrap">
+                    <div class="rag-upload-bar" id="rag-upload-bar"></div>
+                </div>
                 <div class="rag-upload-msg inf" id="rag-upload-msg">Uploading…</div>
             </div>
             <button class="rag-sync-btn" id="rag-sync-btn">
@@ -418,375 +763,751 @@
     </script>
 
     <script type="module">
-    import * as THREE from 'three';
-    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-    import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        // VRM plugin removed — using GLB directly
 
-    // ---- DOM refs ----
-    const canvas     = document.getElementById('vrm-canvas');
-    const loadingEl  = document.getElementById('loading');
-    const statusEl   = document.getElementById('status');
-    const messagesEl = document.getElementById('messages');
-    const chatInput  = document.getElementById('chat-input');
-    const sendBtn    = document.getElementById('send-btn');
-    const dot        = document.getElementById('connection-dot');
+        // ---- DOM refs ----
+        const canvas = document.getElementById('vrm-canvas');
+        const loadingEl = document.getElementById('loading');
+        const statusEl = document.getElementById('status');
+        const messagesEl = document.getElementById('messages');
+        const chatInput = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-btn');
+        const dot = document.getElementById('connection-dot');
 
-    // ---- Renderer ----
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-
-    // Scene with gradient background
-    const scene = new THREE.Scene();
-    const bgCanvas = document.createElement('canvas');
-    bgCanvas.width = 2; bgCanvas.height = 512;
-    const bgCtx = bgCanvas.getContext('2d');
-    const grad = bgCtx.createLinearGradient(0, 0, 0, 512);
-    grad.addColorStop(0, '#0f0f1e');
-    grad.addColorStop(1, '#060610');
-    bgCtx.fillStyle = grad;
-    bgCtx.fillRect(0, 0, 2, 512);
-    scene.background = new THREE.CanvasTexture(bgCanvas);
-
-    // Camera
-    const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-    camera.position.set(0, 1.3, 3.5);
-
-    // Lighting
-    scene.add(new THREE.AmbientLight(0x404060, 0.4));
-    const key = new THREE.PointLight(0xfff4e6, 2.5, 20);
-    key.position.set(2, 2.5, 3);
-    scene.add(key);
-    const rim = new THREE.PointLight(0x7c5cfc, 1.2, 20);
-    rim.position.set(0, 3, -2);
-    scene.add(rim);
-    const fill = new THREE.PointLight(0xc4d0ff, 0.8, 20);
-    fill.position.set(-2.5, 1.5, 2);
-    scene.add(fill);
-
-    // ---- VRM ----
-    let vrm = null;
-    const clock = new THREE.Clock();
-
-    const loader = new GLTFLoader();
-    loader.register((parser) => new VRMLoaderPlugin(parser));
-
-    loader.load(
-        '/static/Seed-san.vrm',
-        (gltf) => {
-            vrm = gltf.userData.vrm;
-            VRMUtils.removeUnnecessaryVertices(vrm.scene);
-            VRMUtils.removeUnnecessaryJoints(vrm.scene);
-
-            scene.add(vrm.scene);
-
-            const box = new THREE.Box3().setFromObject(vrm.scene);
-            const size = box.max.y - box.min.y;
-            const scale = 2.2 / size;
-            vrm.scene.scale.setScalar(scale);
-            const centerY = (box.max.y + box.min.y) / 2 * scale;
-            vrm.scene.position.y = -centerY;
-
-            loadingEl.classList.add('hidden');
-            console.log('[Neuro] VRM loaded');
-        },
-        (progress) => {
-            if (progress.total) {
-                const pct = Math.round(progress.loaded / progress.total * 100);
-                loadingEl.querySelector('p').textContent = `Loading Neuro... ${pct}%`;
-            }
-        },
-        (error) => {
-            console.error('[Neuro] VRM load error:', error);
-            loadingEl.querySelector('p').textContent = 'VRM failed to load';
-        }
-    );
-
-    // ---- Resize ----
-    function resize() {
-        const rect = canvas.parentElement.getBoundingClientRect();
-        const w = rect.width;
-        const h = rect.height;
-        renderer.setSize(w, h);
+        // ---- Renderer ----
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        camera.aspect = w / h;
-        camera.updateProjectionMatrix();
-    }
-    resize();
-    window.addEventListener('resize', resize);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 0.72;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-    // ---- Animate ----
-    let blinkTimer = 0;
-    function animate() {
-        requestAnimationFrame(animate);
-        const dt = clock.getDelta();
+        // Scene with gradient background
+        const scene = new THREE.Scene();
+        // Room-like gradient: dark charcoal top, very slightly warmer bottom
+        const bgCanvas = document.createElement('canvas');
+        bgCanvas.width = 512; bgCanvas.height = 512;
+        const bgCtx = bgCanvas.getContext('2d');
+        // Radial centre glow (like a soft backroom light behind the character)
+        const radGrad = bgCtx.createRadialGradient(256, 200, 20, 256, 200, 380);
+        radGrad.addColorStop(0, '#1a1520');
+        radGrad.addColorStop(0.5, '#110e18');
+        radGrad.addColorStop(1, '#07060d');
+        bgCtx.fillStyle = radGrad;
+        bgCtx.fillRect(0, 0, 512, 512);
+        // Subtle horizontal band — suggests a wall/desk boundary
+        const hGrad = bgCtx.createLinearGradient(0, 280, 0, 512);
+        hGrad.addColorStop(0, 'rgba(20,15,35,0)');
+        hGrad.addColorStop(1, 'rgba(5,4,10,0.7)');
+        bgCtx.fillStyle = hGrad;
+        bgCtx.fillRect(0, 0, 512, 512);
+        scene.background = new THREE.CanvasTexture(bgCanvas);
 
-        if (vrm) {
-            vrm.update(dt);
-            const t = clock.elapsedTime;
-            const hips = vrm.humanoid.getNormalizedBoneNode('hips');
-            if (hips) hips.rotation.y = Math.sin(t * 0.5) * 0.03;
+        // Camera — full body standing shot
+        const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+        camera.position.set(0, 0.85, 3.0);
+        camera.lookAt(0, 0.9, 0);
 
-            blinkTimer += dt;
-            if (blinkTimer > 4) {
-                blinkTimer = 0;
-                try {
-                    vrm.expressionManager.setValue('blink', 1);
-                    setTimeout(() => { vrm.expressionManager.setValue('blink', 0); }, 150);
-                } catch(e) {}
+        // ── Lighting: portrait studio setup matching reference image ──────────
+        // Soft ambient — cool dark purple base
+        scene.add(new THREE.AmbientLight(0x2a1f3d, 0.35));
+
+        // Key light: warm front-right, high up — main face illumination
+        const key = new THREE.DirectionalLight(0xffe8c8, 1.1);
+        key.position.set(1.5, 2.8, 3.0);
+        scene.add(key);
+
+        // Rim light: cool purple/blue from behind-left — gives the glowing edge on hair
+        const rim = new THREE.PointLight(0x9b6fff, 1.8, 12);
+        rim.position.set(-1.8, 2.2, -1.5);
+        scene.add(rim);
+
+        // Back rim right: slight cyan tint (matches the teal accent in reference)
+        const rim2 = new THREE.PointLight(0x5ce1e6, 0.9, 10);
+        rim2.position.set(2.0, 1.8, -2.0);
+        scene.add(rim2);
+
+        // Fill: soft cool light from left side — lifts shadows without flattening
+        const fill = new THREE.DirectionalLight(0xbac8ff, 1.0);
+        fill.position.set(-2.0, 1.0, 1.5);
+        scene.add(fill);
+
+        // Under-glow: very subtle warm from below (dress highlight)
+        const under = new THREE.PointLight(0x3d1f5a, 1.2, 6);
+        under.position.set(0, -0.5, 1.5);
+        scene.add(under);
+
+        // ---- VRM ----
+        let vrm = null;
+        const clock = new THREE.Clock();
+
+        const loader = new GLTFLoader();
+        // No VRM plugin needed for GLB
+
+        loader.load(
+            '/static/Seed-san.glb',
+            (gltf) => {
+                // GLB — use the scene directly
+                const model = gltf.scene;
+                scene.add(model);
+
+                // Face camera (VRM models export facing -Z, camera is at +Z)
+                model.rotation.y = Math.PI;
+
+                // Step 1: measure unscaled bbox
+                const box0 = new THREE.Box3().setFromObject(model);
+                const height = box0.max.y - box0.min.y;
+
+                // Step 2: scale so full body fits in frame
+                const scale = 1.62 / height;
+                model.scale.setScalar(scale);
+
+                // Step 3: recompute bbox AFTER scale
+                const box1 = new THREE.Box3().setFromObject(model);
+
+                // Step 4: place feet at ground, full body visible
+                model.position.y = -box1.min.y - 0.08;
+
+                // Store on vrm object so animate() still works
+                vrm = { scene: model, isGLB: true };
+                window._neuroModel = model;
+
+                loadingEl.classList.add('hidden');
+                const dbg = new THREE.Box3().setFromObject(model);
+                console.log('[Neuro] GLB loaded — world bounds:',
+                    'y:', dbg.min.y.toFixed(2), '→', dbg.max.y.toFixed(2),
+                    '| scale:', scale.toFixed(3),
+                    '| posY:', model.position.y.toFixed(3)
+                );
+            },
+            (progress) => {
+                if (progress.total) {
+                    const pct = Math.round(progress.loaded / progress.total * 100);
+                    loadingEl.querySelector('p').textContent = `Loading Neuro... ${pct}%`;
+                }
+            },
+            (error) => {
+                console.error('[Neuro] VRM load error:', error);
+                loadingEl.querySelector('p').textContent = 'VRM failed to load';
+            }
+        );
+
+        // ---- Resize ----
+        function resize() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const w = rect.width;
+            const h = rect.height;
+            renderer.setSize(w, h);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        // ---- GLB resting pose (applied once after load) ----
+        // Exact bone names from J_Bip VRM skeleton
+        const BONE_MAP = {
+            'J_Bip_L_Shoulder': n => { n.rotation.z = 0.15; n.rotation.x = 0.10; },
+            'J_Bip_R_Shoulder': n => { n.rotation.z = -0.15; n.rotation.x = 0.10; },
+            'J_Bip_L_UpperArm': n => { n.rotation.z = 0.95; n.rotation.x = 0.18; n.rotation.y = -0.12; },
+            'J_Bip_R_UpperArm': n => { n.rotation.z = -0.95; n.rotation.x = 0.18; n.rotation.y = 0.12; },
+            'J_Bip_L_LowerArm': n => { n.rotation.z = 0.15; n.rotation.x = 0.08; },
+            'J_Bip_R_LowerArm': n => { n.rotation.z = -0.15; n.rotation.x = 0.08; },
+        };
+
+        // Keep refs for idle sway
+        const boneRefs = {};
+
+        function applyRestingPose(model) {
+            model.traverse(node => {
+                if (!node.isBone) return;
+                node.userData._baseY = node.position.y;
+                boneRefs[node.name] = node;          // store every bone by name
+                if (BONE_MAP[node.name]) BONE_MAP[node.name](node);
+            });
+            console.log('[Neuro] Resting pose applied. Arm bones found:',
+                !!boneRefs['J_Bip_L_UpperArm'], !!boneRefs['J_Bip_R_UpperArm']);
+        }
+
+        // ---- Neuro-sama Animation State ----
+        let blinkTimer = 0;
+        let restingPoseApplied = false;
+        let neuroIsSpeaking = false;  // toggled by websocket state
+
+        // Head tilt snap state (Neuro-sama chaos tilt)
+        let headTilt = { current: 0, target: 0, timer: 0, interval: 3.5 };
+        // Eye dart state
+        let eyeDart = { x: 0, y: 0, targetX: 0, targetY: 0, timer: 0, interval: 2.2 };
+        // Hair physics state (per-strand lag)
+        const hairPhysics = {};
+        // Talk gesture state
+        let talkGesture = { active: false, timer: 0, side: 'L', amount: 0 };
+
+        function lerp(a, b, t) { return a + (b - a) * t; }
+        function randomRange(min, max) { return min + Math.random() * (max - min); }
+
+        // Call this when speaking starts/stops
+        function setNeuroSpeaking(val) {
+            neuroIsSpeaking = val;
+            if (val) {
+                // Trigger a talk gesture on random arm
+                talkGesture.active = true;
+                talkGesture.timer = 0;
+                talkGesture.side = Math.random() > 0.5 ? 'L' : 'R';
+                talkGesture.amount = randomRange(0.04, 0.09);
+            } else {
+                talkGesture.active = false;
             }
         }
 
-        renderer.render(scene, camera);
-    }
-    animate();
+        // ---- Animate ----
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.05); // cap at 50ms — prevents tab-switch spin
 
-    // ---- Expression helpers ----
-    function clampExpression(val) { return Math.max(0, Math.min(1, val)); }
+            if (vrm) {
+                if (vrm.isGLB && !restingPoseApplied) {
+                    restingPoseApplied = true;
+                    applyRestingPose(vrm.scene);
 
-    function setExpression(mode) {
-        if (!vrm || !vrm.expressionManager) return;
-        // Reset all
-        const presets = ['happy', 'sad', 'angry', 'relaxed', 'surprised', 'blink'];
-        presets.forEach(p => { try { vrm.expressionManager.setValue(p, 0); } catch(e) {} });
+                    // Init hair physics state
+                    Object.keys(boneRefs).forEach(name => {
+                        if (name.startsWith('J_Sec_Hair')) {
+                            hairPhysics[name] = { angle: 0, vel: 0 };
+                        }
+                    });
+                }
 
-        if (mode === 'happy') { try { vrm.expressionManager.setValue('happy', 1); } catch(e) {} }
-        else if (mode === 'surprised') { try { vrm.expressionManager.setValue('surprised', 1); } catch(e) {} }
-        else if (mode === 'thinking') { try { vrm.expressionManager.setValue('relaxed', 0.6); } catch(e) {} }
-        else { try { vrm.expressionManager.setValue('relaxed', 0.3); } catch(e) {} }
-    }
+                if (!vrm.isGLB && vrm.update) vrm.update(dt);
 
-    // ---- Lip sync ----
-    let lipTimer = null;
-    function startLipSync(text) {
-        stopLipSync();
-        const words = text.split(/\s+/);
-        let idx = 0;
+                if (vrm.isGLB) {
+                    const t = clock.elapsedTime;
 
-        lipTimer = setInterval(() => {
-            if (idx >= words.length) { stopLipSync(); return; }
-            const open = 0.2 + Math.random() * 0.8;
-            try { vrm.expressionManager.setValue('aa', open); } catch(e) {}
-            idx++;
-        }, 90);
-    }
+                    // ---- Hips & breathing ----
+                    const hips = boneRefs['J_Bip_C_Hips'];
+                    if (hips) {
+                        hips.rotation.y = Math.sin(t * 0.4) * 0.022;
+                        hips.position.y = (hips.userData._baseY ?? 0) + Math.sin(t * 0.9) * 0.004;
+                    }
+                    const spine = boneRefs['J_Bip_C_Spine'];
+                    if (spine) spine.rotation.x = Math.sin(t * 0.9) * 0.006;
+                    const chest = boneRefs['J_Bip_C_Chest'];
+                    if (chest) chest.rotation.x = Math.sin(t * 0.9) * 0.005;
+                    const upperChest = boneRefs['J_Bip_C_UpperChest'];
+                    if (upperChest) upperChest.rotation.x = Math.sin(t * 0.9) * 0.004;
 
-    function stopLipSync() {
-        if (lipTimer) { clearInterval(lipTimer); lipTimer = null; }
-        try { if (vrm) vrm.expressionManager.setValue('aa', 0); } catch(e) {}
-    }
+                    // ---- Neuro-sama HEAD TILT SNAP ----
+                    headTilt.timer += dt;
+                    if (headTilt.timer > headTilt.interval) {
+                        headTilt.timer = 0;
+                        headTilt.interval = randomRange(2.5, 5.0);
+                        // Occasionally snap to a strong tilt, then back
+                        const r = Math.random();
+                        if (r < 0.3) headTilt.target = randomRange(0.06, 0.12);   // right tilt
+                        else if (r < 0.6) headTilt.target = randomRange(-0.12, -0.06); // left tilt
+                        else headTilt.target = randomRange(-0.02, 0.02);  // near center
+                    }
+                    // Snap toward target (fast = Neuro chaos energy)
+                    headTilt.current = lerp(headTilt.current, headTilt.target, dt * 2.5);
 
-    // ---- Status ----
-    function setStatus(s) {
-        statusEl.classList.remove('speaking', 'thinking');
-        if (s === 'speaking') {
-            statusEl.textContent = 'Speaking';
-            statusEl.classList.add('speaking');
-        } else if (s === 'thinking') {
-            statusEl.textContent = 'Thinking';
-            statusEl.classList.add('thinking');
-        } else {
-            statusEl.textContent = 'Idle';
+                    const neck = boneRefs['J_Bip_C_Neck'];
+                    if (neck) neck.rotation.z = headTilt.current * 0.4 + Math.sin(t * 0.35) * 0.006;
+                    const head = boneRefs['J_Bip_C_Head'];
+                    if (head) {
+                        head.rotation.z = headTilt.current + Math.sin(t * 0.35) * 0.012;
+                        // head.rotation.x is driven by updateMouth() below
+                    }
+
+                    // ---- EYES, HAIR, FINGERS, ARMS (unchanged) ----
+
+                    // ---- EYE DART ----
+                    eyeDart.timer += dt;
+                    if (eyeDart.timer > eyeDart.interval) {
+                        eyeDart.timer = 0;
+                        eyeDart.interval = randomRange(1.5, 3.5);
+                        eyeDart.targetX = randomRange(-0.06, 0.06);
+                        eyeDart.targetY = randomRange(-0.02, 0.03);
+                    }
+                    eyeDart.x = lerp(eyeDart.x, eyeDart.targetX, dt * 5.0);
+                    eyeDart.y = lerp(eyeDart.y, eyeDart.targetY, dt * 5.0);
+                    const eyeL = boneRefs['J_Adj_L_FaceEye'];
+                    const eyeR = boneRefs['J_Adj_R_FaceEye'];
+                    if (eyeL) { eyeL.rotation.y = eyeDart.x; eyeL.rotation.x = eyeDart.y; }
+                    if (eyeR) { eyeR.rotation.y = eyeDart.x; eyeR.rotation.x = eyeDart.y; }
+
+                    // ---- HAIR PHYSICS (spring simulation) ----
+                    Object.keys(hairPhysics).forEach(name => {
+                        const bone = boneRefs[name];
+                        if (!bone) return;
+                        const h = hairPhysics[name];
+                        // Extract strand index for phase offset
+                        const idx = parseInt(name.match(/\d+/g)?.[1] ?? '0');
+                        const phase = idx * 0.4;
+                        // Target driven by hips sway + gentle wind
+                        const target = Math.sin(t * 0.8 + phase) * 0.018 + Math.sin(t * 1.3 + phase) * 0.008;
+                        // Spring: pull toward target, dampen velocity
+                        const stiffness = 8.0;
+                        const damping = 4.5;
+                        h.vel += (target - h.angle) * stiffness * dt;
+                        h.vel *= Math.pow(0.01, damping * dt); // exponential damping
+                        h.angle += h.vel * dt;
+                        bone.rotation.z = h.angle;
+                        // Lower strands get more sway (they're longer)
+                        if (name.includes('_03') || name.includes('_04') || name.includes('_05')) {
+                            bone.rotation.x = Math.sin(t * 0.6 + phase) * 0.012;
+                        }
+                    });
+
+                    // ---- FINGER CURL (natural resting hand) ----
+                    const fingerBones = [
+                        'J_Bip_L_Index1', 'J_Bip_L_Index2', 'J_Bip_L_Index3',
+                        'J_Bip_L_Middle1', 'J_Bip_L_Middle2', 'J_Bip_L_Middle3',
+                        'J_Bip_L_Ring1', 'J_Bip_L_Ring2', 'J_Bip_L_Ring3',
+                        'J_Bip_L_Little1', 'J_Bip_L_Little2', 'J_Bip_L_Little3',
+                        'J_Bip_R_Index1', 'J_Bip_R_Index2', 'J_Bip_R_Index3',
+                        'J_Bip_R_Middle1', 'J_Bip_R_Middle2', 'J_Bip_R_Middle3',
+                        'J_Bip_R_Ring1', 'J_Bip_R_Ring2', 'J_Bip_R_Ring3',
+                        'J_Bip_R_Little1', 'J_Bip_R_Little2', 'J_Bip_R_Little3',
+                    ];
+                    fingerBones.forEach(name => {
+                        const b = boneRefs[name];
+                        if (!b) return;
+                        // Base curl: knuckle=0.3, mid=0.5, tip=0.4
+                        const curl = name.includes('1') ? 0.30 : name.includes('2') ? 0.50 : 0.40;
+                        // Tiny breathing micro-movement
+                        const phase = name.charCodeAt(7) * 0.1;
+                        b.rotation.x = curl + Math.sin(t * 0.7 + phase) * 0.008;
+                    });
+                    // Thumbs slightly out
+                    ['J_Bip_L_Thumb1', 'J_Bip_R_Thumb1'].forEach(n => {
+                        const b = boneRefs[n];
+                        if (b) { b.rotation.z = n.includes('_L_') ? 0.3 : -0.3; b.rotation.x = 0.2; }
+                    });
+
+                    // ---- ARMS (sway + talk gesture) ----
+                    talkGesture.timer += dt;
+                    const talkCurve = talkGesture.active
+                        ? Math.sin(Math.min(talkGesture.timer * 0.8, Math.PI)) * talkGesture.amount
+                        : 0;
+
+                    const lArm = boneRefs['J_Bip_L_UpperArm'];
+                    if (lArm) {
+                        const gesture = talkGesture.side === 'L' ? -talkCurve : 0;
+                        lArm.rotation.z = 0.95 + Math.sin(t * 0.5 + 0.3) * 0.010 + gesture;
+                        lArm.rotation.x = 0.18;
+                        lArm.rotation.y = -0.12;
+                    }
+                    const rArm = boneRefs['J_Bip_R_UpperArm'];
+                    if (rArm) {
+                        const gesture = talkGesture.side === 'R' ? talkCurve : 0;
+                        rArm.rotation.z = -0.95 - Math.sin(t * 0.5 + 0.3) * 0.010 - gesture;
+                        rArm.rotation.x = 0.18;
+                        rArm.rotation.y = 0.12;
+                    }
+
+                } else {
+                    // VRM humanoid bones
+                    const t = clock.elapsedTime;
+                    const hips = vrm.humanoid?.getNormalizedBoneNode('hips');
+                    if (hips) {
+                        hips.rotation.y = Math.sin(t * 0.4) * 0.025;
+                        hips.position.y = Math.sin(t * 0.9) * 0.006;
+                    }
+                    const head = vrm.humanoid?.getNormalizedBoneNode('head');
+                    if (head) {
+                        head.rotation.z = Math.sin(t * 0.35) * 0.018;
+                        head.rotation.x = Math.sin(t * 0.6) * 0.010;
+                    }
+                    const neck = vrm.humanoid?.getNormalizedBoneNode('neck');
+                    if (neck) neck.rotation.z = Math.sin(t * 0.35) * 0.008;
+                }
+
+                blinkTimer += dt;
+                if (blinkTimer > randomRange(3, 6)) {
+                    blinkTimer = 0;
+                    // GLB: animate eye bones for blink
+                    if (vrm.isGLB) {
+                        const eyeL = boneRefs['J_Adj_L_FaceEye'];
+                        const eyeR = boneRefs['J_Adj_R_FaceEye'];
+                        if (eyeL && eyeR) {
+                            const savedLx = eyeL.rotation.x, savedRx = eyeR.rotation.x;
+                            eyeL.rotation.x = 0.6; eyeR.rotation.x = 0.6;
+                            setTimeout(() => {
+                                if (eyeL) eyeL.rotation.x = savedLx;
+                                if (eyeR) eyeR.rotation.x = savedRx;
+                            }, 120);
+                        }
+                    } else if (vrm.expressionManager) {
+                        try {
+                            vrm.expressionManager.setValue('blink', 1);
+                            setTimeout(() => { vrm.expressionManager.setValue('blink', 0); }, 150);
+                        } catch (e) { }
+                    }
+                }
+                // Mouth animation (GLB jaw — runs for both GLB and VRM)
+                if (vrm.isGLB) updateMouth(clock.elapsedTime, dt);
+
+            }
+
+            renderer.render(scene, camera);
         }
-    }
+        animate();
 
-    // ---- Messages ----
-    function addUserMsg(text) {
-        const div = document.createElement('div');
-        div.className = 'msg user';
-        div.textContent = text;
-        messagesEl.appendChild(div);
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
+        // ---- Expression helpers ----
+        function clampExpression(val) { return Math.max(0, Math.min(1, val)); }
 
-    let lastNeuroMsg = null;
-    function addNeuroMsg(text) {
-        if (lastNeuroMsg && lastNeuroMsg.querySelector('.text-content')) {
-            lastNeuroMsg.querySelector('.text-content').textContent = text;
-        } else {
-            lastNeuroMsg = document.createElement('div');
-            lastNeuroMsg.className = 'msg neuro';
-            const label = document.createElement('div');
-            label.className = 'label';
-            label.textContent = 'Neuro';
-            lastNeuroMsg.appendChild(label);
-            const tDiv = document.createElement('div');
-            tDiv.className = 'text-content';
-            tDiv.textContent = text;
-            lastNeuroMsg.appendChild(tDiv);
-            messagesEl.appendChild(lastNeuroMsg);
+        function setExpression(mode) {
+            if (!vrm || vrm.isGLB || !vrm.expressionManager) return;
+            // Reset all
+            const presets = ['happy', 'sad', 'angry', 'relaxed', 'surprised', 'blink'];
+            presets.forEach(p => { try { vrm.expressionManager.setValue(p, 0); } catch (e) { } });
+
+            if (mode === 'happy') { try { vrm.expressionManager.setValue('happy', 1); } catch (e) { } }
+            else if (mode === 'surprised') { try { vrm.expressionManager.setValue('surprised', 1); } catch (e) { } }
+            else if (mode === 'thinking') { try { vrm.expressionManager.setValue('relaxed', 0.6); } catch (e) { } }
+            else { try { vrm.expressionManager.setValue('relaxed', 0.3); } catch (e) { } }
         }
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
 
-    function showTyping() {
-        if (document.getElementById('typing')) return;
-        const el = document.createElement('div');
-        el.id = 'typing';
-        el.className = 'typing-indicator';
-        el.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
-        messagesEl.appendChild(el);
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
-    function hideTyping() { document.getElementById('typing')?.remove(); }
+        // ---- Mouth / Lip animation state (GLB jaw bone) ----
+        let mouthOpen = 0;          // current jaw open amount (0-1)
+        let mouthTarget = 0;        // target jaw open amount
+        let isTalking = false;      // true while audio is estimated to be playing
+        let talkEndTime = 0;        // clock.elapsedTime when talking should stop
 
-    let isProcessing = false;
+        // Estimate audio duration from text (130 wpm average, min 1s)
+        function estimateAudioDuration(text) {
+            const words = text.trim().split(/\s+/).length;
+            return Math.max(1.0, (words / 130) * 60);
+        }
 
-    // ---- WebSocket ----
-    let ws;
-    function connect() {
-        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        ws = new WebSocket(`${proto}//${location.host}/ws/chat`);
+        // Called when Neuro starts speaking — animates mouth for estimated audio length
+        function startMouthAnim(text) {
+            isTalking = true;
+            talkEndTime = clock.elapsedTime + estimateAudioDuration(text);
+        }
 
-        ws.onopen = () => dot.classList.add('connected');
-        ws.onclose = () => { dot.classList.remove('connected'); setTimeout(connect, 2000); };
+        function stopMouthAnim() {
+            isTalking = false;
+            mouthTarget = 0;
+        }
 
-        ws.onmessage = (e) => {
-            try {
-                const d = JSON.parse(e.data);
-                if (d.type === 'state') {
-                    if (d.state === 'thinking') { setStatus('thinking'); showTyping(); }
-                    else if (d.state === 'idle') {
-                        setStatus('idle');
+        // Called every frame from animate() — drives jaw bone
+        function updateMouth(t, dt) {
+            if (!vrm || !vrm.isGLB) return;
+
+            if (isTalking && t < talkEndTime) {
+                // Randomise jaw target every ~80ms using time buckets
+                const bucket = Math.floor(t / 0.08);
+                // Use bucket as seed for pseudo-random open amount
+                const pseudo = Math.abs(Math.sin(bucket * 127.1 + 311.7));
+                mouthTarget = 0.15 + pseudo * 0.45;  // range 0.15–0.60
+            } else {
+                isTalking = false;
+                mouthTarget = 0;
+                setNeuroSpeaking(false);
+            }
+
+            // Smooth jaw toward target
+            mouthOpen = lerp(mouthOpen, mouthTarget, dt * 18.0);
+
+            // Drive J_Bip_C_Head rotation.x as jaw proxy
+            // (most J_Bip models don't have a separate jaw bone)
+            const jaw = boneRefs['J_Bip_C_Head'];
+            if (jaw) {
+                // Base head bob + mouth open offset
+                const breathX = Math.sin(t * 0.6) * 0.009;
+                const headBobX = isTalking ? Math.sin(t * 4.0) * 0.006 : 0;
+                jaw.rotation.x = breathX + headBobX - mouthOpen * 0.08;
+            }
+
+            // Also try actual jaw/mouth bone names (some VRM exports have them)
+            const jawBone = boneRefs['J_Bip_C_Jaw'] || boneRefs['jaw'] || boneRefs['Jaw'];
+            if (jawBone) {
+                jawBone.rotation.x = mouthOpen * 0.25;
+            }
+        }
+
+        // ---- Audio status poller ----
+        // Polls /api/audio_status every 300ms to sync animation with actual playback
+        let audioPollerActive = false;
+        function startAudioPoller() {
+            if (audioPollerActive) return;
+            audioPollerActive = true;
+            pollOnce();
+        }
+        function pollOnce() {
+            if (!audioPollerActive) return;
+            fetch('/api/audio_status')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.playing) {
+                        // Audio is actively playing — keep animating
+                        isTalking = true;
+                        talkEndTime = clock.elapsedTime + 0.6; // extend 600ms ahead
+                        if (!neuroIsSpeaking) setNeuroSpeaking(true);
+                        setTimeout(pollOnce, 300);
+                    } else if (isTalking) {
+                        // Was playing, flag gone — audio just ended
+                        isTalking = false;
+                        talkEndTime = clock.elapsedTime + 0.3; // 300ms tail
+                        setNeuroSpeaking(false);
+                        audioPollerActive = false;
+                        neuroIsSpeaking = false;
+                    } else {
+                        // Flag not yet created — still generating, keep waiting
+                        setTimeout(pollOnce, 400);
+                    }
+                })
+                .catch(() => {
+                    // API failed — just stop
+                    audioPollerActive = false;
+                    neuroIsSpeaking = false;
+                    isTalking = false;
+                });
+        }
+
+        // ---- Lip sync (VRM expression manager — non-GLB) ----
+        let lipTimer = null;
+        function startLipSync(text) {
+            stopLipSync();
+            startMouthAnim(text);           // drives jaw bone for GLB
+            if (!vrm || vrm.isGLB) return;  // expression manager only for VRM
+            const words = text.split(/\s+/);
+            let idx = 0;
+            lipTimer = setInterval(() => {
+                if (idx >= words.length) { stopLipSync(); return; }
+                const open = 0.2 + Math.random() * 0.8;
+                try { vrm.expressionManager.setValue('aa', open); } catch (e) { }
+                idx++;
+            }, 90);
+        }
+
+        function stopLipSync() {
+            if (lipTimer) { clearInterval(lipTimer); lipTimer = null; }
+            stopMouthAnim();
+            try { if (vrm && !vrm.isGLB) vrm.expressionManager.setValue('aa', 0); } catch (e) { }
+        }
+
+        // ---- Status ----
+        function setStatus(s) {
+            statusEl.classList.remove('speaking', 'thinking');
+            if (s === 'speaking') {
+                statusEl.textContent = 'Speaking';
+                statusEl.classList.add('speaking');
+            } else if (s === 'thinking') {
+                statusEl.textContent = 'Thinking';
+                statusEl.classList.add('thinking');
+            } else {
+                statusEl.textContent = 'Idle';
+            }
+        }
+
+        // ---- Messages ----
+        function addUserMsg(text) {
+            const div = document.createElement('div');
+            div.className = 'msg user';
+            div.textContent = text;
+            messagesEl.appendChild(div);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        let lastNeuroMsg = null;
+        function addNeuroMsg(text) {
+            if (lastNeuroMsg && lastNeuroMsg.querySelector('.text-content')) {
+                lastNeuroMsg.querySelector('.text-content').textContent = text;
+            } else {
+                lastNeuroMsg = document.createElement('div');
+                lastNeuroMsg.className = 'msg neuro';
+                const label = document.createElement('div');
+                label.className = 'label';
+                label.textContent = 'Neuro';
+                lastNeuroMsg.appendChild(label);
+                const tDiv = document.createElement('div');
+                tDiv.className = 'text-content';
+                tDiv.textContent = text;
+                lastNeuroMsg.appendChild(tDiv);
+                messagesEl.appendChild(lastNeuroMsg);
+            }
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        function showTyping() {
+            if (document.getElementById('typing')) return;
+            const el = document.createElement('div');
+            el.id = 'typing';
+            el.className = 'typing-indicator';
+            el.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+            messagesEl.appendChild(el);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+        function hideTyping() { document.getElementById('typing')?.remove(); }
+
+        let isProcessing = false;
+
+        // ---- WebSocket ----
+        let ws;
+        function connect() {
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${proto}//${location.host}/ws/chat`);
+
+            ws.onopen = () => dot.classList.add('connected');
+            ws.onclose = () => { dot.classList.remove('connected'); setTimeout(connect, 2000); };
+
+            ws.onmessage = (e) => {
+                try {
+                    const d = JSON.parse(e.data);
+                    if (d.type === 'state') {
+                        if (d.state === 'thinking') { setStatus('thinking'); showTyping(); setNeuroSpeaking(false); }
+                        else if (d.state === 'idle') {
+                            setStatus('idle');
+                            hideTyping();
+                            stopLipSync();
+                            setNeuroSpeaking(false);
+                            isProcessing = false;
+                            sendBtn.disabled = false;
+                            chatInput.disabled = false;
+                        }
+                    }
+                    if (d.type === 'text') {
                         hideTyping();
-                        stopLipSync();
+                        setStatus('speaking');
+                        addNeuroMsg(d.text);
+                        // Unlock input immediately when response starts streaming
+                        isProcessing = false;
+                        sendBtn.disabled = false;
+                        chatInput.disabled = false;
+                        // Start audio poller once (when first word arrives)
+                        if (!neuroIsSpeaking) {
+                            neuroIsSpeaking = true; // mark as pending
+                            // Wait for TTS+RVC generation then start polling
+                            setTimeout(startAudioPoller, 2500);
+                        }
+                    }
+                    if (d.type === 'announcement') {
+                        addNeuroMsg(d.text);
                         isProcessing = false;
                         sendBtn.disabled = false;
                         chatInput.disabled = false;
                     }
-                }
-                if (d.type === 'text') {
-                    hideTyping();
-                    setStatus('speaking');
-                    addNeuroMsg(d.text);
-                    startLipSync(d.text);
-                }
-                if (d.type === 'announcement') {
-                    addNeuroMsg(d.text);
-                    isProcessing = false;
-                    sendBtn.disabled = false;
-                    chatInput.disabled = false;
-                }
-                // RAG live updates
-                if (d.type === 'rag_stats' || d.type === 'status') {
-                    const mem  = d.memory_count    ?? d.rag?.memory_count;
-                    const know = d.knowledge_count ?? d.rag?.knowledge_count;
-                    if (mem  !== undefined) document.getElementById('rag-mem').textContent  = mem;
-                    if (know !== undefined) document.getElementById('rag-know').textContent = know;
-                    document.getElementById('rag-dot').classList.remove('offline');
-                }
-            } catch(err) { console.error('WebSocket parse error:', err); }
-        };
-        window.ws = ws;   // expose for RAG panel
-    }
-    connect();
+                    // RAG live updates
+                    if (d.type === 'rag_stats' || d.type === 'status') {
+                        const mem = d.memory_count ?? d.rag?.memory_count;
+                        const know = d.knowledge_count ?? d.rag?.knowledge_count;
+                        if (mem !== undefined) document.getElementById('rag-mem').textContent = mem;
+                        if (know !== undefined) document.getElementById('rag-know').textContent = know;
+                        document.getElementById('rag-dot').classList.remove('offline');
+                    }
+                } catch (err) { console.error('WebSocket parse error:', err); }
+            };
+            window.ws = ws;   // expose for RAG panel
+        }
+        connect();
 
-    // ---- Send ----
-    function sendMessage() {
-        const text = chatInput.value.trim();
-        if (!text || isProcessing) return;
-        isProcessing = true;
-        sendBtn.disabled = true;
-        chatInput.disabled = true;
-        lastNeuroMsg = null;
-        addUserMsg(text);
-        chatInput.value = '';
-        ws.send(JSON.stringify({ message: text }));
-    }
+        // ---- Send ----
+        function sendMessage() {
+            const text = chatInput.value.trim();
+            if (!text || isProcessing) return;
+            isProcessing = true;
+            lastNeuroMsg = null;
+            addUserMsg(text);
+            chatInput.value = '';
+            ws.send(JSON.stringify({ message: text }));
+        }
 
-    sendBtn.addEventListener('click', sendMessage);
-    chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+        sendBtn.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
 
     </script>
 
     <script>
-    (function () {
-        async function fetchStats() {
-            try {
-                const res  = await fetch('/api/rag/stats');
-                if (!res.ok) { document.getElementById('rag-dot').classList.add('offline'); return; }
-                const json = await res.json();
-                document.getElementById('rag-mem').textContent  = json.memory_count    ?? '—';
-                document.getElementById('rag-know').textContent = json.knowledge_count ?? '—';
-                document.getElementById('rag-dot').classList.remove('offline');
-            } catch (_) {
-                document.getElementById('rag-dot').classList.add('offline');
-            }
-        }
-        fetchStats();
-        setInterval(fetchStats, 15000);
-
-        async function uploadFile(file) {
-            const status = document.getElementById('rag-upload-status');
-            const fname  = document.getElementById('rag-upload-filename');
-            const bar    = document.getElementById('rag-upload-bar');
-            const msg    = document.getElementById('rag-upload-msg');
-
-            status.classList.add('visible');
-            fname.textContent = file.name;
-            bar.style.width   = '0%';
-            msg.className     = 'rag-upload-msg inf';
-            msg.textContent   = 'Uploading…';
-
-            let prog = 0;
-            const ticker = setInterval(() => {
-                prog = Math.min(prog + Math.random() * 14, 88);
-                bar.style.width = prog + '%';
-            }, 150);
-
-            try {
-                const form = new FormData();
-                form.append('file', file);
-                const res  = await fetch('/api/rag/upload', { method: 'POST', body: form });
-                const json = await res.json();
-                clearInterval(ticker);
-                bar.style.width = '100%';
-                if (!res.ok) {
-                    msg.className   = 'rag-upload-msg err';
-                    msg.textContent = json.error || 'Upload failed.';
-                    return;
+        (function () {
+            async function fetchStats() {
+                try {
+                    const res = await fetch('/api/rag/stats');
+                    if (!res.ok) { document.getElementById('rag-dot').classList.add('offline'); return; }
+                    const json = await res.json();
+                    document.getElementById('rag-mem').textContent = json.memory_count ?? '—';
+                    document.getElementById('rag-know').textContent = json.knowledge_count ?? '—';
+                    document.getElementById('rag-dot').classList.remove('offline');
+                } catch (_) {
+                    document.getElementById('rag-dot').classList.add('offline');
                 }
-                msg.className   = 'rag-upload-msg ok';
-                msg.textContent = '✓ ' + json.filename + ' — ' + json.chunks_indexed + ' chunks';
-                fetchStats();
-            } catch (_) {
-                clearInterval(ticker);
-                msg.className   = 'rag-upload-msg err';
-                msg.textContent = 'Network error — is Neuro running?';
             }
-            setTimeout(() => status.classList.remove('visible'), 4500);
-        }
+            fetchStats();
+            setInterval(fetchStats, 15000);
 
-        const zone  = document.getElementById('rag-dropzone');
-        const input = document.getElementById('rag-file-input');
-        input.addEventListener('change', () => { [...input.files].forEach(uploadFile); input.value = ''; });
-        zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
-        zone.addEventListener('dragleave', ()  => zone.classList.remove('drag-over'));
-        zone.addEventListener('drop', e => {
-            e.preventDefault();
-            zone.classList.remove('drag-over');
-            [...e.dataTransfer.files].forEach(uploadFile);
-        });
+            async function uploadFile(file) {
+                const status = document.getElementById('rag-upload-status');
+                const fname = document.getElementById('rag-upload-filename');
+                const bar = document.getElementById('rag-upload-bar');
+                const msg = document.getElementById('rag-upload-msg');
 
-        const syncBtn = document.getElementById('rag-sync-btn');
-        syncBtn.addEventListener('click', async () => {
-            syncBtn.classList.add('spinning');
-            syncBtn.disabled = true;
-            try {
-                const res  = await fetch('/api/rag/sync', { method: 'POST' });
-                const json = await res.json();
-                if (json.total_knowledge !== undefined)
-                    document.getElementById('rag-know').textContent = json.total_knowledge;
-                syncBtn.style.color       = '#22c55e';
-                syncBtn.style.borderColor = '#22c55e';
-                setTimeout(() => { syncBtn.style.color = ''; syncBtn.style.borderColor = ''; }, 1400);
-            } catch (_) {}
-            syncBtn.classList.remove('spinning');
-            syncBtn.disabled = false;
-        });
-    })();
+                status.classList.add('visible');
+                fname.textContent = file.name;
+                bar.style.width = '0%';
+                msg.className = 'rag-upload-msg inf';
+                msg.textContent = 'Uploading…';
+
+                let prog = 0;
+                const ticker = setInterval(() => {
+                    prog = Math.min(prog + Math.random() * 14, 88);
+                    bar.style.width = prog + '%';
+                }, 150);
+
+                try {
+                    const form = new FormData();
+                    form.append('file', file);
+                    const res = await fetch('/api/rag/upload', { method: 'POST', body: form });
+                    const json = await res.json();
+                    clearInterval(ticker);
+                    bar.style.width = '100%';
+                    if (!res.ok) {
+                        msg.className = 'rag-upload-msg err';
+                        msg.textContent = json.error || 'Upload failed.';
+                        return;
+                    }
+                    msg.className = 'rag-upload-msg ok';
+                    msg.textContent = '✓ ' + json.filename + ' — ' + json.chunks_indexed + ' chunks';
+                    fetchStats();
+                } catch (_) {
+                    clearInterval(ticker);
+                    msg.className = 'rag-upload-msg err';
+                    msg.textContent = 'Network error — is Neuro running?';
+                }
+                setTimeout(() => status.classList.remove('visible'), 4500);
+            }
+
+            const zone = document.getElementById('rag-dropzone');
+            const input = document.getElementById('rag-file-input');
+            input.addEventListener('change', () => { [...input.files].forEach(uploadFile); input.value = ''; });
+            zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+            zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+            zone.addEventListener('drop', e => {
+                e.preventDefault();
+                zone.classList.remove('drag-over');
+                [...e.dataTransfer.files].forEach(uploadFile);
+            });
+
+            const syncBtn = document.getElementById('rag-sync-btn');
+            syncBtn.addEventListener('click', async () => {
+                syncBtn.classList.add('spinning');
+                syncBtn.disabled = true;
+                try {
+                    const res = await fetch('/api/rag/sync', { method: 'POST' });
+                    const json = await res.json();
+                    if (json.total_knowledge !== undefined)
+                        document.getElementById('rag-know').textContent = json.total_knowledge;
+                    syncBtn.style.color = '#22c55e';
+                    syncBtn.style.borderColor = '#22c55e';
+                    setTimeout(() => { syncBtn.style.color = ''; syncBtn.style.borderColor = ''; }, 1400);
+                } catch (_) { }
+                syncBtn.classList.remove('spinning');
+                syncBtn.disabled = false;
+            });
+        })();
     </script>
 </body>
+
 </html>

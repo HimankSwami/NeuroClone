@@ -82,7 +82,7 @@ def speak(text: str) -> None:
         f"python3 -m rvc_python cli "
         f"-i {TEMP_AUDIO} -o {FINAL_AUDIO} "
         f"-mp {MODEL_PATH} -ip {INDEX_PATH} "
-        f"-v v2 -pi 2 -me rmvpe -de cuda:0"
+        f"-v v2 -pi 2 -me rmvpe -de cpu"
     )
 
     try:
@@ -94,7 +94,10 @@ def speak(text: str) -> None:
     except subprocess.CalledProcessError as e:
         print(f"  [RVC Error]: {e.stderr.decode().strip()}")
         print("  [Fallback] Playing base Piper voice...")
+        FLAG = os.path.join(BASE_PATH, "voice", "playing.flag")
+        open(FLAG, "w").close()
         os.system(f"aplay {TEMP_AUDIO}")
+        if os.path.exists(FLAG): os.remove(FLAG)
         return
 
     # ------------------------------------------------------------------
@@ -102,7 +105,13 @@ def speak(text: str) -> None:
     # ------------------------------------------------------------------
     if os.path.exists(FINAL_AUDIO):
         print("  [Audio] Playing...")
+        FLAG = os.path.join(BASE_PATH, "voice", "playing.flag")
+        open(FLAG, "w").close()
         os.system(f"aplay {FINAL_AUDIO}")
+        if os.path.exists(FLAG): os.remove(FLAG)
     else:
         print("  [RVC] output.wav missing, falling back to Piper voice.")
+        FLAG = os.path.join(BASE_PATH, "voice", "playing.flag")
+        open(FLAG, "w").close()
         os.system(f"aplay {TEMP_AUDIO}")
+        if os.path.exists(FLAG): os.remove(FLAG)

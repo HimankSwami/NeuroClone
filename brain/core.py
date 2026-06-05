@@ -261,7 +261,7 @@ class NeuroBrain:
             "model": self.model,
             "messages": self.history[-11:],   # Rolling 11-message window
             "stream": False,
-            "keep_alive": "5m",               # Unload after response (saves VRAM for RVC)
+            "keep_alive": -1,               # Unload after response (saves VRAM for RVC)
             "options": {
                 "temperature": 0.8
             }
