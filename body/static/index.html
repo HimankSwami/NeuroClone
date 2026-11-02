@@ -391,6 +391,62 @@
             height: 20px;
         }
 
+        /* ── Mic Button ────────────────────────────────────────────────── */
+        #mic-btn {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--input-bg);
+            color: var(--text-dim);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+            position: relative;
+        }
+        #mic-btn:hover { border-color: var(--accent); color: var(--accent); }
+        #mic-btn:active { transform: scale(0.92); }
+        #mic-btn.listening {
+            background: rgba(239,68,68,0.12);
+            border-color: #ef4444;
+            color: #ef4444;
+            animation: mic-pulse 1.2s ease-in-out infinite;
+        }
+        #mic-btn.listening::after {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 2px solid #ef4444;
+            animation: mic-ring 1.2s ease-out infinite;
+        }
+        #mic-btn svg { width: 18px; height: 18px; }
+        @keyframes mic-pulse { 0%,100%{opacity:1} 50%{opacity:0.65} }
+        @keyframes mic-ring  { 0%{transform:scale(1);opacity:0.8} 100%{transform:scale(1.5);opacity:0} }
+
+        /* Live transcript preview */
+        #mic-preview {
+            display: none;
+            position: absolute;
+            bottom: 82px;
+            left: 28px;
+            right: 28px;
+            background: #0e0e1c;
+            border: 1px solid var(--accent);
+            border-radius: 12px;
+            padding: 10px 16px;
+            font-size: 13px;
+            color: var(--text-dim);
+            font-style: italic;
+            z-index: 10;
+            pointer-events: none;
+        }
+        #mic-preview.active { display: block; }
+        #mic-preview span { color: var(--text); font-style: normal; }
+
         /* ── RAG Panel ─────────────────────────────────────────────────── */
         .rag-panel {
             width: 260px;
@@ -680,8 +736,17 @@
                     class="text-accent">text</b> · <b class="text-accent2">sync knowledge</b></p>
         </div>
         <div class="messages" id="messages"></div>
-        <div class="input-bar">
-            <input id="chat-input" type="text" placeholder="Say something..." autocomplete="off" />
+        <div class="input-bar" style="position:relative;">
+            <div id="mic-preview">🎤 <span id="mic-transcript"></span></div>
+            <button id="mic-btn" title="Hold to speak" aria-label="Voice input">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="2" width="6" height="11" rx="3"/>
+                    <path d="M5 10a7 7 0 0 0 14 0"/>
+                    <line x1="12" y1="19" x2="12" y2="22"/>
+                    <line x1="8"  y1="22" x2="16" y2="22"/>
+                </svg>
+            </button>
+            <input id="chat-input" type="text" placeholder="Say something or click 🎤..." autocomplete="off" />
             <button id="send-btn" title="Send message" aria-label="Send message">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
                     stroke-linejoin="round">
@@ -1426,6 +1491,102 @@
 
         sendBtn.addEventListener('click', sendMessage);
         chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+        // ── Voice Input (MediaRecorder → Whisper.cpp backend) ──────────
+        const micBtn        = document.getElementById('mic-btn');
+        const micPreview    = document.getElementById('mic-preview');
+        const micTranscript = document.getElementById('mic-transcript');
+
+        let isListening   = false;
+        let mediaRecorder = null;
+        let audioChunks   = [];
+        let micStream     = null;
+
+        function setMicState(listening) {
+            isListening = listening;
+            micBtn.classList.toggle('listening', listening);
+            micPreview.classList.toggle('active', listening);
+            chatInput.placeholder = listening ? 'Listening… release Space or click 🎤 to send'
+                                              : 'Say something or click 🎤…';
+        }
+
+        async function startListening() {
+            if (isListening || isProcessing) return;
+            try {
+                micStream   = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(micStream);
+                audioChunks   = [];
+
+                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+                mediaRecorder.onstop = async () => {
+                    // Stop all mic tracks
+                    micStream.getTracks().forEach(t => t.stop());
+
+                    micTranscript.textContent = 'transcribing…';
+                    const blob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const form = new FormData();
+                    form.append('file', blob, 'audio.webm');
+
+                    try {
+                        const res  = await fetch('/api/transcribe', { method: 'POST', body: form });
+                        const json = await res.json();
+                        const text = (json.text || '').trim();
+
+                        if (text) {
+                            micTranscript.textContent = text;
+                            chatInput.value = text;
+                            // Small delay so user can see what was heard
+                            setTimeout(() => {
+                                setMicState(false);
+                                sendMessage();
+                            }, 450);
+                        } else {
+                            micTranscript.textContent = '(nothing heard — try again)';
+                            setTimeout(() => setMicState(false), 1200);
+                        }
+                    } catch (err) {
+                        micTranscript.textContent = '(transcription failed)';
+                        console.error('[Neuro] Whisper error:', err);
+                        setTimeout(() => setMicState(false), 1200);
+                    }
+                };
+
+                mediaRecorder.start();
+                setMicState(true);
+                micTranscript.textContent = 'listening…';
+                console.log('[Neuro] Recording started');
+
+            } catch (err) {
+                console.error('[Neuro] Mic access denied:', err);
+                micTranscript.textContent = '(mic permission denied)';
+                micPreview.classList.add('active');
+                setTimeout(() => { micPreview.classList.remove('active'); }, 2000);
+            }
+        }
+
+        function stopListening() {
+            if (!isListening || !mediaRecorder) return;
+            if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+        }
+
+        // Click to toggle (click once = start, click again = stop + send)
+        micBtn.addEventListener('click', () => {
+            if (isListening) stopListening();
+            else startListening();
+        });
+
+        // Hold Space = push-to-talk (only when not typing in input)
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && document.activeElement !== chatInput && !isListening && !e.repeat) {
+                e.preventDefault();
+                startListening();
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'Space' && isListening) stopListening();
+        });
+
+        console.log('[Neuro] Voice input ready (Whisper backend) — click 🎤 or hold Space');
 
     </script>
 

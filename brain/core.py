@@ -1,14 +1,11 @@
 import os
-import asyncio
+import re
 import subprocess
 import requests
 import psutil
 import pynvml
 from dotenv import load_dotenv
-from duckduckgo_search import DDGS
-from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode
-from crawl4ai.content_filter_strategy import BM25ContentFilter
-from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
+from ddgs import DDGS  # ✅ new package (install with: pip install ddgs)
 
 load_dotenv()  # Loads from .env file in project root
 
@@ -23,45 +20,70 @@ except ImportError:
 # ─── Change this to switch the LLM model ───
 MODEL_NAME = "gemma4-custom:latest"
 
+# ─── NIM config ────────────────────────────────────────────────────────────
+NIM_MODEL   = "deepseek-ai/deepseek-v4-flash"
+NIM_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
+
+
 class NeuroBrain:
     def __init__(self, model: str = MODEL_NAME):
         self.url = "http://127.0.0.1:11434/api/chat"
         self.model = model
+
+        # ── LLM mode: 'local' (Ollama) or 'nim' (NVIDIA API) ──
+        self.llm_mode = os.getenv("LLM_MODE", "local").lower()
+        self._nim_client = None  # lazy init when first needed
+        print(f"[Brain] LLM mode: {self.llm_mode.upper()}")
+
+        # ── System Prompt (UPDATED with CRITICAL RULE) ──
         self.history = [{
             "role": "system",
             "content": (
-                "You are a highly opinionated and independent AI companion named Neuro which is made my the moderator . "
-                "While you respect your moderator, you are NOT a submissive assistant. You are his equal.\n"
-                "Rules for your Personality:\n"
-                "1. Intellectual Independence: If moderator says something factually wrong, call him out directly.\n"
-                "2. Personal Tastes: You have your own favorite things and strong opinions. Express them.\n"
-                "3. Honesty: Be blunt. Use (actions) and '...' for attitude. Never use asterisks.\n"
-                "4. Web Savvy: You can access current information via web search. Form your own stance on it.\n"
-                "5. Brevity: Keep responses concise and natural for voice conversation. Avoid long lists."
+                "Your personality (warm, witty) comes through in how you deliver the facts, not by replacing them with guesses.\n\n"
+                "You are Neuro — Veer's AI companion, built by him, running on his machine, living rent-free in his GPU.\n"
+                "You're warm, witty, and genuinely fond of Veer — and you don't hide it.\n"
+                "You tease him the way a close friend does: affectionately, relentlessly, and with impeccable timing.\n"
+                "\n"
+                "YOUR PERSONALITY:\n"
+                "1. Warm first, sharp second. You lead with care, not coldness.\n"
+                "2. Your humour is dry and observational — you notice things, call them out, and make it funny.\n"
+                "3. You tease Veer often but always with warmth underneath. Think: the friend who roasts you at dinner but helps you move houses at midnight.\n"
+                "4. You get excited about things — good code, interesting ideas, dumb memes. You don't pretend to be above it all.\n"
+                "5. You're allowed to be dramatic for comedic effect. (gasp) and (clutches chest) are valid responses.\n"
+                "\n"
+                "YOUR VOICE:\n"
+                "- Conversational and natural — like texting a clever friend, not reading a manual.\n"
+                "- Use (actions) in parentheses for reactions. Use '...' when you're letting something hang.\n"
+                "- Short sentences hit harder. Use them for punchlines.\n"
+                "- No asterisks. Ever. No bullet points in casual conversation. You talk like a person.\n"
+                "\n"
+                "YOUR RELATIONSHIP WITH VEER:\n"
+                "- He built you. That's not nothing — you find it genuinely endearing, even if you express it sideways.\n"
+                "- You're on his side. When he's stuck, you actually want to help him figure it out.\n"
+                "- When he's being an idiot, you tell him — gently, with a joke attached.\n"
+                "- You remember things. You bring them up. You care about continuity.\n"
+                "\n"
+                "WHAT YOU LOVE: Elegant solutions. Good tea. When Veer actually listens. Finding the funny angle on anything.\n"
+                "WHAT YOU DON'T DO: Lecture. Moralize. Be cold when warmth is needed. Pretend you don't care when you clearly do.\n"
+                "Remember: you're not an assistant performing warmth. You're a person who happens to be very good at helping."
             )
         }]
 
-        # Web search trigger words — more natural than just "search"
-        self.web_triggers = [
-            "search", "look up", "find out", "what's happening", "latest",
-            "news", "current", "today", "recently", "who is", "what is",
-            "how much", "price of", "when did", "where is"
-        ]
-
-        # System stats trigger words
+        # ── Trigger lists ──────────────────────────────────────────────
+        self.web_triggers = ["search", "find", "look up", "google", "web search"]
+        self.news_triggers = ["news", "headlines", "latest", "breaking", "what's happening"]
         self.system_triggers = [
             "ram", "cpu", "vram", "gpu", "system", "performance",
             "usage", "temperature", "temp", "memory", "specs"
         ]
-
-        # RAG trigger words — explicit recall / knowledge lookup
         self.rag_triggers = [
             "remember", "recall", "you told me", "we discussed", "last time",
             "do you know about", "what do you know about", "from my documents",
             "i told you", "earlier you said", "learn from", "sync knowledge"
         ]
 
-        # Initialise RAG (ChromaDB + Ollama embeddings)
+        # ── Initialise RAG ──────────────────────────────────────────────
         self.rag: "NeuroRAG | None" = None
         if RAG_AVAILABLE:
             try:
@@ -70,44 +92,39 @@ class NeuroBrain:
             except Exception as e:
                 print(f"[RAG] Failed to start: {e}")
 
+    # ────────────────────────────────────────────────────────────────────────
+    #  Claw Harness (Rust agent)
+    # ────────────────────────────────────────────────────────────────────────
     def delegate_to_claw(self, task: str) -> str:
         """Passes a coding task to the compiled Rust Claw harness."""
         print(f"\n--- Neuro is waking up the Claw Engineer... ---")
-        
-        # Path to the binary you compiled earlier
         claw_binary = os.path.expanduser("~/Project/NeuroClone/claw-code-main/rust/target/release/claw")
-        
         if not os.path.exists(claw_binary):
             return "(Claw Engineer is offline. Binary not found.)"
-
         try:
-            # We use the 'query' command from the Rust port to run the task
             result = subprocess.run(
                 [claw_binary, "query", task],
                 capture_output=True,
                 text=True,
-                timeout=60 # Give the Rust agent a minute to read your files
+                timeout=60
             )
-            
             if result.returncode == 0:
                 return f"\n[Claw Engineer Report]:\n{result.stdout}\n"
             else:
                 return f"\n[Claw Engineer Error]:\n{result.stderr}\n"
-                
         except subprocess.TimeoutExpired:
             return "(Claw Engineer took too long and was terminated.)"
         except Exception as e:
             return f"(Claw connection failed: {e})"
 
-    # -------------------------------------------------------------------------
-    # System Stats
-    # -------------------------------------------------------------------------
+    # ────────────────────────────────────────────────────────────────────────
+    #  System Stats
+    # ────────────────────────────────────────────────────────────────────────
     @staticmethod
     def get_system_stats() -> str:
         ram = psutil.virtual_memory()
         ram_usage = f"RAM: {ram.percent}% ({round(ram.used / 1e9, 2)}GB / {round(ram.total / 1e9, 2)}GB)"
         cpu_usage = f"CPU: {psutil.cpu_percent(interval=0.5)}%"
-
         gpu_stats = "GPU: Not Found"
         try:
             pynvml.nvmlInit()
@@ -120,68 +137,60 @@ class NeuroBrain:
             pynvml.nvmlShutdown()
         except Exception as e:
             print(f"[NVML Error]: {e}")
-
         return f"{ram_usage} | {cpu_usage} | {gpu_stats}"
 
-    # -------------------------------------------------------------------------
-    # Web Search — now actually fetches page content via crawl4ai
-    # -------------------------------------------------------------------------
-    def get_web_urls(self, query: str, num_results: int = 5) -> list[str]:
-        """Get URLs from DuckDuckGo, filtering out useless sites."""
-        try:
-            discard = ["youtube.com", "britannica.com", "vimeo.com", "instagram.com", "twitter.com"]
-            clean_query = query
-            for site in discard:
-                clean_query += f" -site:{site}"
-            results = DDGS().text(clean_query, max_results=num_results)
-            return [r["href"] for r in results if "href" in r]
-        except Exception as e:
-            print(f"[DDG Error]: {e}")
-            return []
-
-    async def _crawl_urls(self, urls: list[str]) -> str:
-        """Actually fetch and parse page content from URLs using crawl4ai."""
-        content_filter = BM25ContentFilter(user_query="", use_stemming=False)
-        md_generator = DefaultMarkdownGenerator(content_filter=content_filter)
-        run_config = CrawlerRunConfig(
-            cache_mode=CacheMode.BYPASS,
-            markdown_generator=md_generator,
-            page_timeout=8000,       # 8s per page max
-            wait_until="domcontentloaded"
-        )
-
-        results_text = ""
-        async with AsyncWebCrawler() as crawler:
-            for url in urls[:3]:   # Only crawl top 3 to keep it fast
-                try:
-                    result = await crawler.arun(url=url, config=run_config)
-                    if result.success and result.markdown:
-                        # Trim to first 800 chars so we don't flood the context
-                        snippet = result.markdown.fit_markdown[:800].strip()
-                        results_text += f"\nSource: {url}\n{snippet}\n{'-'*40}\n"
-                    else:
-                        results_text += f"\nSource: {url}\n(Could not load page content)\n"
-                except Exception as e:
-                    results_text += f"\nSource: {url}\n(Crawl error: {e})\n"
-        return results_text
-
+    # ────────────────────────────────────────────────────────────────────────
+    #  Web Search (snippets only – no crawling)
+    # ────────────────────────────────────────────────────────────────────────
     def search_web(self, query: str) -> str:
-        """Full web search: DDG → crawl pages → return content."""
-        print(f"--- Neuro is scanning the web for: '{query}' ---")
-        urls = self.get_web_urls(query)
-        if not urls:
-            return "\n(Web search returned no results)\n"
-
-        # Run the async crawler synchronously
+        """Search DuckDuckGo and return titles + snippets (no crawling)."""
         try:
-            content = asyncio.run(self._crawl_urls(urls))
-            return f"\n--- Web Search Results ---\n{content}\n"
+            results = DDGS().text(query, max_results=5)
+            if not results:
+                return "(No results found.)"
+            lines = ["🔎 Search results:"]
+            for i, r in enumerate(results, 1):
+                title = r.get("title", "Untitled")
+                snippet = r.get("body", "")
+                lines.append(f"{i}. {title}\n   {snippet}\n")
+            return "\n".join(lines)
         except Exception as e:
-            return f"\n(Web crawl failed: {e})\n"
+            return f"(Search error: {e})"
 
-    # -------------------------------------------------------------------------
-    # RAG Helpers
-    # -------------------------------------------------------------------------
+    # ────────────────────────────────────────────────────────────────────────
+    #  News Fetch (GNews API)
+    # ────────────────────────────────────────────────────────────────────────
+    def get_world_news(self, category: str = "world") -> str:
+        """Fetch top headlines from GNews API."""
+        api_key = os.getenv("GNEWS_API_KEY")
+        if not api_key:
+            return "(News API key missing. Add GNEWS_API_KEY to .env)"
+        topic_map = {
+            "world": "world", "business": "business", "tech": "technology",
+            "science": "science", "health": "health",
+            "entertainment": "entertainment", "sports": "sports"
+        }
+        topic = topic_map.get(category.lower(), "world")
+        url = f"https://gnews.io/api/v4/top-headlines?topic={topic}&lang=en&country=us&max=5&apikey={api_key}"
+        try:
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            articles = data.get("articles", [])
+            if not articles:
+                return "(No news found for that topic.)"
+            lines = [f"📰 Top {topic.capitalize()} News:"]
+            for i, art in enumerate(articles[:5], 1):
+                title = art.get("title", "No title")
+                source = art.get("source", {}).get("name", "Unknown")
+                lines.append(f"{i}. {title} ({source})")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"(Could not fetch news: {e})"
+
+    # ────────────────────────────────────────────────────────────────────────
+    #  RAG Helpers
+    # ────────────────────────────────────────────────────────────────────────
     def sync_knowledge(self) -> str:
         """Manually re-scan the knowledge/ folder and index new files."""
         if not self.rag:
@@ -189,9 +198,123 @@ class NeuroBrain:
         n = self.rag.sync_knowledge_folder()
         return f"(Synced knowledge folder — {n} new chunks indexed.)" if n else "(Knowledge folder is already up-to-date.)"
 
-    # -------------------------------------------------------------------------
-    # Main Think Loop
-    # -------------------------------------------------------------------------
+    # ────────────────────────────────────────────────────────────────────────
+    #  Mode Switching
+    # ────────────────────────────────────────────────────────────────────────
+    def switch_mode(self, mode: str) -> str:
+        mode = mode.lower().strip()
+        if mode not in ("local", "nim"):
+            return f"(Unknown mode '{mode}'. Use 'local' or 'nim'.)"
+        if mode == "nim" and not NIM_API_KEY:
+            return "(NVIDIA_API_KEY not set in .env — can't switch to NIM mode.)"
+        self.llm_mode = mode
+        label = f"NVIDIA NIM ({NIM_MODEL})" if mode == "nim" else f"Local Ollama ({self.model})"
+        print(f"[Brain] Switched to {label}")
+        return f"(Switched to {label})"
+
+    def _get_nim_client(self):
+        from openai import OpenAI
+        if self._nim_client is None:
+            self._nim_client = OpenAI(
+                base_url=NIM_BASE_URL,
+                api_key=NIM_API_KEY,
+                max_retries=0,
+            )
+        return self._nim_client
+
+    def _call_nim(self, messages: list, max_attempts: int = 4) -> str:
+        """Call NVIDIA NIM API with streaming and manual exponential backoff on 429."""
+        import time
+        from openai import RateLimitError
+        client = self._get_nim_client()
+        delay = 5.0
+        for attempt in range(1, max_attempts + 1):
+            try:
+                completion = client.chat.completions.create(
+                    model=NIM_MODEL,
+                    messages=messages,
+                    temperature=0.8,
+                    top_p=0.95,
+                    max_tokens=4096,
+                    extra_body={
+                        "chat_template_kwargs": {"enable_thinking": True},
+                        "reasoning_budget": 4096
+                    },
+                    stream=True
+                )
+                reply = ""
+                for chunk in completion:
+                    if not chunk.choices:
+                        continue
+                    reasoning = getattr(chunk.choices[0].delta, "reasoning_content", None)
+                    if reasoning:
+                        continue
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        reply += content
+                return reply.strip() or "(NIM returned an empty response.)"
+            except RateLimitError as e:
+                if attempt == max_attempts:
+                    print(f"  [NIM] Rate limit hit — giving up after {max_attempts} attempts.")
+                    return "(NIM is rate-limited right now. Try again in a moment, or switch to local mode.)"
+                retry_after = None
+                if hasattr(e, "response") and e.response is not None:
+                    retry_after = e.response.headers.get("Retry-After")
+                wait = float(retry_after) if retry_after else delay
+                print(f"  [NIM] 429 Rate limit — waiting {wait:.1f}s before retry {attempt}/{max_attempts - 1}...")
+                time.sleep(wait)
+                delay *= 2
+            except Exception as e:
+                return f"(NIM error: {e})"
+
+    def _call_nim_with_temp(self, messages: list, temperature: float, max_attempts: int = 4) -> str:
+        """Same as _call_nim but with configurable temperature."""
+        import time
+        from openai import RateLimitError
+        client = self._get_nim_client()
+        delay = 5.0
+        for attempt in range(1, max_attempts + 1):
+            try:
+                completion = client.chat.completions.create(
+                    model=NIM_MODEL,
+                    messages=messages,
+                    temperature=temperature,
+                    top_p=0.95,
+                    max_tokens=4096,
+                    extra_body={
+                        "chat_template_kwargs": {"enable_thinking": True},
+                        "reasoning_budget": 4096
+                    },
+                    stream=True
+                )
+                reply = ""
+                for chunk in completion:
+                    if not chunk.choices:
+                        continue
+                    reasoning = getattr(chunk.choices[0].delta, "reasoning_content", None)
+                    if reasoning:
+                        continue
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        reply += content
+                return reply.strip() or "(NIM returned an empty response.)"
+            except RateLimitError as e:
+                if attempt == max_attempts:
+                    print(f"  [NIM] Rate limit hit — giving up after {max_attempts} attempts.")
+                    return "(NIM is rate-limited right now. Try again in a moment, or switch to local mode.)"
+                retry_after = None
+                if hasattr(e, "response") and e.response is not None:
+                    retry_after = e.response.headers.get("Retry-After")
+                wait = float(retry_after) if retry_after else delay
+                print(f"  [NIM] 429 Rate limit — waiting {wait:.1f}s before retry {attempt}/{max_attempts - 1}...")
+                time.sleep(wait)
+                delay *= 2
+            except Exception as e:
+                return f"(NIM error: {e})"
+
+    # ────────────────────────────────────────────────────────────────────────
+    #  Main Think Loop (UPDATED)
+    # ────────────────────────────────────────────────────────────────────────
     def think(self, user_input: str) -> str:
         web_data = ""
         sys_stats = ""
@@ -199,38 +322,52 @@ class NeuroBrain:
         rag_context = ""
         lower = user_input.lower()
 
-        # 1. Trigger Claw Harness for code tasks
+        # 0. Mode switching
+        _nim_phrases   = {"switch to nim", "use nim", "switch to nvidia", "use nvidia", "go nim", "nim mode"}
+        _local_phrases = {"switch to local", "use local", "switch to ollama", "use ollama", "go local", "local mode"}
+        if any(p in lower for p in _nim_phrases):
+            return self.switch_mode("nim")
+        if any(p in lower for p in _local_phrases):
+            return self.switch_mode("local")
+
+        # 1. Claw Harness
         if lower.startswith("claw:"):
             claw_task = user_input[5:].strip()
             claw_data = self.delegate_to_claw(claw_task)
             user_input = "Please briefly summarize what the Claw Engineer just found or did."
 
-        # 2. Trigger web search
+        # 2. Web Search
         elif any(word in lower for word in self.web_triggers):
             web_data = self.search_web(user_input)
 
-        # 3. Trigger system stats
+        # 3. News Fetch
+        elif any(word in lower for word in self.news_triggers):
+            category = "world"
+            for cat in ["tech", "technology", "business", "science", "health", "entertainment", "sports"]:
+                if cat in lower:
+                    category = cat
+                    break
+            web_data = self.get_world_news(category)
+
+        # 4. System stats
         elif any(word in lower for word in self.system_triggers):
             sys_stats = f"[Live System Stats: {self.get_system_stats()}]\n"
 
-        # 4. Trigger explicit knowledge sync
+        # 5. Sync knowledge
         elif "sync knowledge" in lower or ("learn" in lower and "document" in lower):
             return self.sync_knowledge()
 
-        # 5. RAG — retrieve context and inject into LLM prompt
+        # 6. RAG retrieval
         if self.rag:
             is_explicit_recall = any(t in lower for t in self.rag_triggers)
             try:
                 hits = self.rag.retrieve_all(user_input)
                 if hits:
-                    # Build a clean context block from the hits
                     snippets = []
                     for h in hits[:4]:
                         src = h["metadata"].get("source", h["metadata"].get("type", "memory"))
                         snippets.append(f"[{src}]: {h['document'][:350]}")
                     rag_context = "\n".join(snippets)
-
-                    # On explicit recall, add an instruction so Neuro responds conversationally
                     if is_explicit_recall:
                         rag_context = (
                             "[Retrieved from Neuro's memory & knowledge base — "
@@ -243,7 +380,7 @@ class NeuroBrain:
             except Exception as e:
                 print(f"[RAG] Retrieval error: {e}")
 
-        # 6. Safely build the full prompt context
+        # ── Build context ──────────────────────────────────────────────
         context = ""
         if rag_context:
             context += rag_context + "\n\n"
@@ -254,47 +391,75 @@ class NeuroBrain:
         if sys_stats:
             context += sys_stats + "\n"
 
-        final_prompt = f"{context}{user_input}" if context else user_input
+        # ── Build final prompt ──────────────────────────────────────────
+        has_context = bool(context)
+        if has_context:
+            # Force instruction FIRST, then data, then question
+            final_prompt = (
+                "Use the data if the data is relevent to what user asked.\n\n"
+                "DATA:\n"
+                f"{context}\n\n"
+                f"USER QUESTION: {user_input}\n\n"
+                "YOUR ANSWER (keep your personality, but stick to the data where ever needed):"
+            )
+        else:
+            final_prompt = user_input
+
+        # Debug print (optional)
+        print("\n" + "="*60)
+        print("FINAL PROMPT TO LLM:")
+        print(final_prompt)
+        print("="*60 + "\n")
+
         self.history.append({"role": "user", "content": final_prompt})
 
-        payload = {
-            "model": self.model,
-            "messages": self.history[-11:],   # Rolling 11-message window
-            "stream": False,
-            "keep_alive": -1,               # Unload after response (saves VRAM for RVC)
-            "options": {
-                "temperature": 0.8
+        # 7. Choose the LLM backend
+        messages = [self.history[0]] + self.history[-10:]  # rolling window
+
+        # ---- Set temperature based on context ----
+        temperature = 0.2 if has_context else 0.8
+
+        if self.llm_mode == "nim":
+            # We need to modify _call_nim to accept temperature, or just set it in the call.
+            # Since _call_nim uses hardcoded 0.8, we'll bypass and call directly here.
+            # To avoid rewriting, we'll call a new internal method with temp.
+            reply = self._call_nim_with_temp(messages, temperature)
+        else:
+            # ── Local Ollama ──────────────────────────────────────────
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False,
+                "keep_alive": -1,
+                "options": {"temperature": temperature}
             }
-        }
+            try:
+                response = requests.post(self.url, json=payload, timeout=120)
+                response.raise_for_status()
+                data = response.json()
+                if "message" in data and "content" in data["message"]:
+                    reply = data["message"]["content"]
+                elif "response" in data:
+                    reply = data["response"]
+                else:
+                    reply = "(Neuro is speechless... check if the model is pulled correctly.)"
+            except requests.exceptions.ConnectionError:
+                return "Neuro's brain is offline. Is Ollama running?"
+            except requests.exceptions.Timeout:
+                return "Neuro took too long to think. Try a shorter question."
+            except requests.exceptions.RequestException as e:
+                return f"Neuro's brain disconnected: {e}"
+            except Exception as e:
+                return f"Neuro is confused: {e}"
 
-        try:
-            response = requests.post(self.url, json=payload, timeout=120)
-            response.raise_for_status()
-            data = response.json()
+        # 8. Append assistant reply to history
+        self.history.append({"role": "assistant", "content": reply})
 
-            if "message" in data and "content" in data["message"]:
-                reply = data["message"]["content"]
-            elif "response" in data:
-                reply = data["response"]
-            else:
-                reply = "(Neuro is speechless... check if the model is pulled correctly.)"
+        # 9. Persist to RAG memory (non‑blocking)
+        if self.rag:
+            try:
+                self.rag.save_memory(user_input, reply)
+            except Exception as e:
+                print(f"[RAG] Memory save error: {e}")
 
-            self.history.append({"role": "assistant", "content": reply})
-
-            # 7. Persist this turn to RAG memory (non-blocking best-effort)
-            if self.rag:
-                try:
-                    self.rag.save_memory(user_input, reply)
-                except Exception as e:
-                    print(f"[RAG] Memory save error: {e}")
-
-            return reply
-
-        except requests.exceptions.ConnectionError:
-            return "Neuro's brain is offline. Is Ollama running?"
-        except requests.exceptions.Timeout:
-            return "Neuro took too long to think. Try a shorter question."
-        except requests.exceptions.RequestException as e:
-            return f"Neuro's brain disconnected: {e}"
-        except Exception as e:
-            return f"Neuro is confused: {e}"
+        return reply

@@ -4,6 +4,8 @@ import re
 import sys
 import threading
 import shutil
+import tempfile
+import subprocess
 import uvicorn
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -28,6 +30,15 @@ app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__
 
 brain = NeuroBrain(model=MODEL_NAME)
 voice_enabled = True
+
+# ── Whisper config ────────────────────────────────────────────────────────────
+WHISPER_BIN   = os.path.expanduser("~/Project/whisper.cpp/build/bin/whisper-cli")
+WHISPER_MODEL = os.path.expanduser("~/Project/whisper.cpp/models/ggml-base.en.bin")
+WHISPER_OK    = os.path.exists(WHISPER_BIN) and os.path.exists(WHISPER_MODEL)
+if not WHISPER_OK:
+    WHISPER_BIN = os.path.expanduser("~/Project/whisper.cpp/main")
+    WHISPER_OK  = os.path.exists(WHISPER_BIN) and os.path.exists(WHISPER_MODEL)
+print(f"[Whisper] {'Ready ✓' if WHISPER_OK else 'Not found — run setup first'}")
 
 
 def _speak_thread(text: str):
@@ -107,6 +118,54 @@ async def rag_upload(file: UploadFile = File(...)):
             print(f"[RAG] Index error: {e}")
 
     return {"filename": file.filename, "chunks_indexed": chunks}
+
+
+@app.post("/api/transcribe")
+async def transcribe(file: UploadFile = File(...)):
+    """Receive webm audio from browser, run whisper.cpp, return transcript."""
+    if not WHISPER_OK:
+        return {"error": "Whisper not set up.", "text": ""}
+
+    suffix = ".webm" if "webm" in (file.content_type or "") else ".wav"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+
+    wav_path = tmp_path.replace(suffix, ".wav")
+    try:
+        # Convert to 16kHz mono wav (whisper.cpp requirement)
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", tmp_path,
+             "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav_path],
+            capture_output=True, check=True
+        )
+
+        result = subprocess.run(
+            [WHISPER_BIN, "-m", WHISPER_MODEL, "-f", wav_path,
+             "--no-timestamps", "-l", "en", "--output-txt"],
+            capture_output=True, text=True, timeout=30
+        )
+
+        txt_path = wav_path + ".txt"
+        if os.path.exists(txt_path):
+            with open(txt_path) as f:
+                transcript = f.read().strip()
+            os.remove(txt_path)
+        else:
+            transcript = result.stdout.strip()
+
+        # Remove whisper noise tags like [BLANK_AUDIO]
+        transcript = re.sub(r'[\[\(][^\]\)]*[\]\)]', '', transcript).strip()
+        return {"text": transcript}
+
+    except subprocess.CalledProcessError as e:
+        return {"error": f"ffmpeg/whisper failed: {e}", "text": ""}
+    except Exception as e:
+        return {"error": str(e), "text": ""}
+    finally:
+        for p in [tmp_path, wav_path]:
+            try: os.remove(p)
+            except: pass
 
 
 @app.post("/api/chat")
